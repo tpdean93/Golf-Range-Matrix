@@ -2,6 +2,21 @@
 
 This project is meant to stay separate from your HOA app repo. Home Assistant remains the control surface, while the logger runs locally on the HA box, lab PC, or any machine that can reach the MQTT broker.
 
+## Custom Card Resources
+
+Package these files as Lovelace module resources:
+
+- `custom-cards/nova-shot-tracer-card.js`
+- `custom-cards/golf-metric-panel-card.js`
+- `custom-cards/golf-shot-history-card.js`
+- `custom-cards/golf-session-control-card.js`
+- `custom-cards/nova-bag-builder-card.js`
+- `custom-cards/nova-wedge-matrix-card.js`
+
+Optional global CSS resource:
+
+- `styles/nova-lovelace-background.css`
+
 ## Required Helpers
 
 The dashboard card expects these helpers:
@@ -11,6 +26,9 @@ The dashboard card expects these helpers:
 - `input_text.golf_tyler_bag`
 - `input_text.golf_kids_bag`
 - `input_text.golf_guest_bag`
+- `input_text.golf_tyler_wedge_matrix`
+- `input_text.golf_kids_wedge_matrix`
+- `input_text.golf_guest_wedge_matrix`
 
 Optional session/logger helpers:
 
@@ -23,9 +41,9 @@ Optional session/logger helpers:
 - `input_number.golf_bag_test_shot_count`
 - `input_text.golf_last_context_json`
 
-## Custom Card Config
+## Bag Builder Card
 
-Register `custom-cards/nova-bag-builder-card.js` as a Lovelace module resource, then use:
+Use:
 
 ```yaml
 type: custom:nova-bag-builder-card
@@ -63,3 +81,38 @@ catalog:
 ```
 
 The card enforces the 14-club max in the UI, supports custom club names, and writes the selected bag to the active player's `input_text`.
+
+## Wedge Matrix Card
+
+Use:
+
+```yaml
+type: custom:nova-wedge-matrix-card
+player_entity: input_select.golf_active_player
+matrix_entities:
+  Tyler: input_text.golf_tyler_wedge_matrix
+  Kids: input_text.golf_kids_wedge_matrix
+  Guest: input_text.golf_guest_wedge_matrix
+players:
+  - Tyler
+  - Kids
+  - Guest
+wedges:
+  - LW
+  - SW
+  - GW
+  - PW
+swings:
+  - Half
+  - Waist
+  - Shoulder
+  - Full
+```
+
+The matrix stores compact text like:
+
+```text
+LW:Half=57/67,Full=74/80;SW:Half=67/80,Full=85/92
+```
+
+That keeps it compatible with simple Home Assistant `input_text` helpers while still supporting custom wedge names and yardage ranges.

@@ -4,10 +4,11 @@ Standalone Home Assistant companion for a NOVA launch monitor setup.
 
 This repo contains:
 
-- `custom-cards/nova-bag-builder-card.js`: Lovelace custom card for per-player bag building, active club selection, custom clubs, and PGA 14-club limit enforcement.
+- `custom-cards/`: Lovelace cards for shot tracing, metric panels, history, session controls, bag building, and wedge matrix.
 - `scripts/nova_shot_logger.py`: local MQTT-to-SQLite shot logger for per-player/per-club shot history.
 - `docs/mqtt-contract.md`: MQTT topics and payloads for the HA dashboard and lab PC bridge.
 - `docs/home-assistant.md`: helper/card setup notes.
+- `docs/dashboard-package.md`: dashboard layout and entity assumptions.
 
 ## Run The Logger
 
@@ -30,3 +31,14 @@ Set `MQTT_USERNAME` and `MQTT_PASSWORD` in `.env` if your broker requires authen
 5. Home Assistant can display those summaries on the NOVA dashboard.
 
 By default, only shots with `recording: true` in the HA context are stored. Set `NOVA_STORE_UNRECORDED=true` to keep every shot.
+
+## Short Game / Wedge Matrix
+
+The wedge matrix card lets each player keep a short-game carry chart by wedge and swing type. The default swings are:
+
+- `Half`
+- `Waist`
+- `Shoulder`
+- `Full`
+
+Each cell can store a number or a range, such as `74/80`, matching the kind of wedge card you showed.

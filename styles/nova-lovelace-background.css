@@ -1,0 +1,20 @@
+html, body, home-assistant, home-assistant-main, app-drawer-layout, partial-panel-resolver, ha-panel-lovelace, hui-root, hui-view, hui-sections-view {
+  --lovelace-background: radial-gradient(circle at 14% 16%, rgba(56, 248, 255, 0.24), transparent 30%), radial-gradient(circle at 82% 10%, rgba(247, 255, 92, 0.11), transparent 24%), radial-gradient(circle at 24% 90%, rgba(168, 85, 247, 0.30), transparent 36%), linear-gradient(135deg, #050814 0%, #07101d 42%, #140a20 100%) !important;
+}
+body,
+ha-panel-lovelace,
+hui-root,
+hui-view,
+hui-sections-view {
+  background: var(--lovelace-background) fixed !important;
+}
+hui-sections-view::part(container),
+hui-view::part(container) {
+  background: transparent !important;
+}
+#view,
+.view,
+.container,
+.sections {
+  background: transparent !important;
+}
