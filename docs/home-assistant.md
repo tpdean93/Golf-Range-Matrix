@@ -89,6 +89,10 @@ Use:
 ```yaml
 type: custom:nova-wedge-matrix-card
 player_entity: input_select.golf_active_player
+bag_entities:
+  Tyler: input_text.golf_tyler_bag
+  Kids: input_text.golf_kids_bag
+  Guest: input_text.golf_guest_bag
 matrix_entities:
   Tyler: input_text.golf_tyler_wedge_matrix
   Kids: input_text.golf_kids_wedge_matrix
@@ -97,17 +101,14 @@ players:
   - Tyler
   - Kids
   - Guest
-wedges:
-  - LW
-  - SW
-  - GW
-  - PW
 swings:
   - Half
   - Waist
   - Shoulder
   - Full
 ```
+
+The matrix columns are automatically filtered from the selected player's saved bag. It will include wedge-style clubs such as `PW`, `GW`, `SW`, `LW`, `AW`, `UW`, `56 Wedge`, or loft labels like `50`.
 
 The matrix stores compact text like:
 

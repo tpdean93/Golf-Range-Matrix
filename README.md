@@ -34,7 +34,9 @@ By default, only shots with `recording: true` in the HA context are stored. Set 
 
 ## Short Game / Wedge Matrix
 
-The wedge matrix card lets each player keep a short-game carry chart by wedge and swing type. The default swings are:
+The wedge matrix card lets each player keep a short-game carry chart by wedge and swing type. It only shows wedges that are saved in that player's bag, so the short-game chart stays tied to the bag setup.
+
+The default swings are:
 
 - `Half`
 - `Waist`
