@@ -89,6 +89,9 @@ Use:
 ```yaml
 type: custom:nova-wedge-matrix-card
 player_entity: input_select.golf_active_player
+club_entity: input_select.golf_active_club
+carry_entity: sensor.golf_carry
+capture_shots: 5
 bag_entities:
   Tyler: input_text.golf_tyler_bag
   Kids: input_text.golf_kids_bag
@@ -109,6 +112,14 @@ swings:
 ```
 
 The matrix columns are automatically filtered from the selected player's saved bag. It will include wedge-style clubs such as `PW`, `GW`, `SW`, `LW`, `AW`, `UW`, `56 Wedge`, or loft labels like `50`.
+
+To auto-fill a yardage:
+
+1. Click the cell for the saved wedge and swing type.
+2. Click `Start` in the 5-shot capture panel.
+3. Hit 5 shots. The card watches `sensor.golf_carry`.
+4. The cell is filled with the carry average.
+5. Click `Save Matrix`.
 
 The matrix stores compact text like:
 

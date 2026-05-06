@@ -5,13 +5,17 @@ class NovaWedgeMatrixCard extends HTMLElement {
     this.matrixEntities = this.config.matrix_entities || {};
     this.bagEntities = this.config.bag_entities || {};
     this.swings = this.config.swings || ['Half', 'Waist', 'Shoulder', 'Full'];
+    this.captureTarget = this.config.capture_shots || 5;
+    this.carryEntity = this.config.carry_entity || 'sensor.golf_carry';
     this._draft = null;
     this._draftPlayer = null;
     this._selected = null;
+    this._capture = null;
   }
 
   set hass(hass) {
     this._hass = hass;
+    this.captureShotIfNeeded(hass);
     this.render();
   }
 
@@ -21,6 +25,15 @@ class NovaWedgeMatrixCard extends HTMLElement {
   player() { return this.state(this.config.player_entity)?.state || this.players[0] || 'Tyler'; }
   matrixEntity() { return this.matrixEntities[this.player()] || this.matrixEntities.Tyler || 'input_text.golf_tyler_wedge_matrix'; }
   bagEntity() { return this.bagEntities[this.player()] || this.bagEntities.Tyler || 'input_text.golf_tyler_bag'; }
+  carryState(hass = this._hass) { return hass?.states?.[this.carryEntity]; }
+  carryValue(hass = this._hass) {
+    const value = Number(this.carryState(hass)?.state);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  carrySignature(hass = this._hass) {
+    const state = this.carryState(hass);
+    return state ? `${state.state}:${state.last_changed || state.last_updated || ''}` : '';
+  }
 
   call(domain, service, data) { this._hass.callService(domain, service, data); }
   setPlayer(player) {
@@ -101,15 +114,40 @@ class NovaWedgeMatrixCard extends HTMLElement {
     this.render();
   }
 
-  addWedge(name) {
-    const clean = String(name || '').trim().replace(/\s+/g, ' ');
-    if (!clean) return;
-    if (!this.wedges().some(club => club.toLowerCase() === clean.toLowerCase())) return;
-    const matrix = this.matrix();
-    if (!matrix[clean]) matrix[clean] = {};
-    this._draft = matrix;
-    this._selected = { club: clean, swing: this.swings[0] };
+  startCapture() {
+    if (!this._selected) return;
+    if (this.config.club_entity) {
+      this.call('input_select', 'select_option', { entity_id: this.config.club_entity, option: this._selected.club });
+    }
+    this._capture = {
+      club: this._selected.club,
+      swing: this._selected.swing,
+      shots: [],
+      signature: this.carrySignature(),
+    };
     this.render();
+  }
+
+  stopCapture() {
+    this._capture = null;
+    this.render();
+  }
+
+  captureShotIfNeeded(hass) {
+    if (!this._capture) return;
+    const signature = this.carrySignature(hass);
+    if (!signature || signature === this._capture.signature) return;
+    this._capture.signature = signature;
+    const carry = this.carryValue(hass);
+    if (carry === null) return;
+    this._capture.shots.push(carry);
+    if (this._capture.shots.length >= this.captureTarget) {
+      const avg = this._capture.shots.reduce((sum, value) => sum + value, 0) / this._capture.shots.length;
+      const value = avg.toFixed(1).replace(/\.0$/, '');
+      this._selected = { club: this._capture.club, swing: this._capture.swing };
+      this.updateSelected(value);
+      this._capture = null;
+    }
   }
 
   save() {
@@ -142,11 +180,18 @@ class NovaWedgeMatrixCard extends HTMLElement {
   renderEditor() {
     const selected = this._selected;
     const value = selected ? this.matrix()?.[selected.club]?.[selected.swing] || '' : '';
+    const capture = this._capture;
+    const captureText = capture
+      ? `${capture.club} / ${capture.swing}: ${capture.shots.length}/${this.captureTarget} shots`
+      : 'Pick a cell, start capture, then hit 5 shots.';
+    const avg = capture && capture.shots.length
+      ? (capture.shots.reduce((sum, shot) => sum + shot, 0) / capture.shots.length).toFixed(1)
+      : '--';
     return `<div class="editor">
       <div><span>Selected</span><b>${selected ? `${this.esc(selected.club)} / ${this.esc(selected.swing)}` : 'Pick a cell'}</b></div>
       <input class="yardInput" placeholder="Yards or range, ex. 74/80" value="${this.esc(value)}" ${selected ? '' : 'disabled'}>
       <button class="apply" ${selected ? '' : 'disabled'}>Set</button>
-    </div>`;
+    </div><div class="capturePanel"><div><span>5-shot capture</span><b>${this.esc(captureText)}</b><small>Running avg: ${this.esc(avg)}</small></div><button class="captureStart" ${selected && !capture ? '' : 'disabled'}>Start</button><button class="captureStop" ${capture ? '' : 'disabled'}>Reset</button></div>`;
   }
 
   render() {
@@ -160,13 +205,15 @@ class NovaWedgeMatrixCard extends HTMLElement {
       ${this.renderEditor()}
       <div class="manageNote">Need another wedge here? Add it to the player bag first.</div>
     </div></ha-card><style>
-      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-30% -20% auto auto;width:300px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(247,255,92,.18),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.note,.manageNote{margin-top:12px;color:rgba(255,255,255,.68);font-size:13px;font-weight:750;line-height:1.35}.manageNote{color:rgba(255,255,255,.48);font-size:12px}.save,.pill,.cell,.apply{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:900}.save{padding:9px 12px;color:#b8ffbf}.save.dirty{color:#f7ff8a;border-color:rgba(247,255,92,.4);background:rgba(247,255,92,.12)}.players{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.pill{padding:9px 12px}.pill.on{background:rgba(247,255,92,.16);border-color:rgba(247,255,92,.45);color:#f7ff8a}.tableWrap{overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18)}table{width:100%;border-collapse:collapse;min-width:520px}th,td{border-bottom:1px solid rgba(255,255,255,.1);border-right:1px solid rgba(255,255,255,.08);padding:8px;text-align:center}th{color:rgba(255,255,255,.58);font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.12em}tbody th{text-align:left;color:#8ffcff}.cell{width:100%;min-height:42px;border-radius:13px;font-size:16px}.cell.filled{background:rgba(56,248,255,.12);border-color:rgba(56,248,255,.28);color:#d8fdff}.cell.selected{box-shadow:inset 0 0 0 1px rgba(247,255,92,.75);color:#f7ff8a}.editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:9px;align-items:center;margin-top:12px}.editor div{padding:10px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.editor span{display:block;color:rgba(255,255,255,.5);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.12em}.editor b{display:block;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.yardInput{min-width:0;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.22);color:white;padding:12px;font-weight:850;outline:none}.apply{border-radius:16px;padding:0 13px;height:42px;color:#8ffcff}.apply:disabled,.yardInput:disabled{opacity:.45}.empty{padding:18px;color:rgba(255,255,255,.62);font-weight:850;text-align:center}@media(max-width:760px){.editor{grid-template-columns:1fr}.apply{width:100%}}
+      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-30% -20% auto auto;width:300px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(247,255,92,.18),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.note,.manageNote{margin-top:12px;color:rgba(255,255,255,.68);font-size:13px;font-weight:750;line-height:1.35}.manageNote{color:rgba(255,255,255,.48);font-size:12px}.save,.pill,.cell,.apply,.captureStart,.captureStop{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:900}.save{padding:9px 12px;color:#b8ffbf}.save.dirty{color:#f7ff8a;border-color:rgba(247,255,92,.4);background:rgba(247,255,92,.12)}.players{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.pill{padding:9px 12px}.pill.on{background:rgba(247,255,92,.16);border-color:rgba(247,255,92,.45);color:#f7ff8a}.tableWrap{overflow:auto;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18)}table{width:100%;border-collapse:collapse;min-width:520px}th,td{border-bottom:1px solid rgba(255,255,255,.1);border-right:1px solid rgba(255,255,255,.08);padding:8px;text-align:center}th{color:rgba(255,255,255,.58);font-size:10px;font-weight:950;text-transform:uppercase;letter-spacing:.12em}tbody th{text-align:left;color:#8ffcff}.cell{width:100%;min-height:42px;border-radius:13px;font-size:16px}.cell.filled{background:rgba(56,248,255,.12);border-color:rgba(56,248,255,.28);color:#d8fdff}.cell.selected{box-shadow:inset 0 0 0 1px rgba(247,255,92,.75);color:#f7ff8a}.editor,.capturePanel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:9px;align-items:center;margin-top:12px}.capturePanel{grid-template-columns:minmax(0,1fr) auto auto}.editor div,.capturePanel div{padding:10px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.editor span,.capturePanel span{display:block;color:rgba(255,255,255,.5);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.12em}.editor b,.capturePanel b{display:block;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.capturePanel small{display:block;margin-top:4px;color:#8ffcff;font-weight:850}.yardInput{min-width:0;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.22);color:white;padding:12px;font-weight:850;outline:none}.apply,.captureStart,.captureStop{border-radius:16px;padding:0 13px;height:42px;color:#8ffcff}.captureStart{color:#f7ff8a}.captureStop{color:#ff9aad}.apply:disabled,.yardInput:disabled,.captureStart:disabled,.captureStop:disabled{opacity:.45}.empty{padding:18px;color:rgba(255,255,255,.62);font-weight:850;text-align:center}@media(max-width:760px){.editor,.capturePanel{grid-template-columns:1fr}.apply,.captureStart,.captureStop{width:100%}}
     </style>`;
     this.querySelectorAll('[data-player]').forEach(button => button.addEventListener('click', () => this.setPlayer(button.dataset.player)));
     this.querySelectorAll('[data-club]').forEach(button => button.addEventListener('click', () => this.selectCell(button.dataset.club, button.dataset.swing)));
     this.querySelector('.save')?.addEventListener('click', () => this.save());
     this.querySelector('.apply')?.addEventListener('click', () => this.updateSelected(this.querySelector('.yardInput')?.value));
     this.querySelector('.yardInput')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') this.updateSelected(ev.currentTarget.value); });
+    this.querySelector('.captureStart')?.addEventListener('click', () => this.startCapture());
+    this.querySelector('.captureStop')?.addEventListener('click', () => this.stopCapture());
   }
 }
 

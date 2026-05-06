@@ -44,3 +44,5 @@ The default swings are:
 - `Full`
 
 Each cell can store a number or a range, such as `74/80`, matching the kind of wedge card you showed.
+
+The card can also capture 5 live carry readings for a selected wedge/swing cell and fill the cell with the average. This is driven from the HA dashboard and uses `sensor.golf_carry`.
