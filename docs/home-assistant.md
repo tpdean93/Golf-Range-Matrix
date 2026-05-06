@@ -12,6 +12,7 @@ Package these files as Lovelace module resources:
 - `custom-cards/golf-session-control-card.js`
 - `custom-cards/nova-bag-builder-card.js`
 - `custom-cards/nova-wedge-matrix-card.js`
+- `custom-cards/golf-club-results-card.js`
 
 Optional global CSS resource:
 
@@ -32,6 +33,14 @@ The dashboard card expects these helpers:
 - `input_text.golf_profile_wedge_matrices_json_2`
 - `input_text.golf_profile_wedge_matrices_json_3`
 - `input_text.golf_profile_wedge_matrices_json_4`
+- `input_text.golf_club_metadata_json`
+- `input_text.golf_club_metadata_json_2`
+- `input_text.golf_club_metadata_json_3`
+- `input_text.golf_club_metadata_json_4`
+- `input_text.golf_club_metadata_json_5`
+- `input_text.golf_club_metadata_json_6`
+- `input_text.golf_club_metadata_json_7`
+- `input_text.golf_club_metadata_json_8`
 - `input_boolean.golf_club_mapping_active`
 - `input_text.golf_tyler_bag`
 - `input_text.golf_kids_bag`
@@ -144,3 +153,18 @@ LW:Half=57/67,Full=74/80;SW:Half=67/80,Full=85/92
 ```
 
 That keeps it compatible with simple Home Assistant `input_text` helpers while still supporting custom wedge names and yardage ranges.
+
+## Club Results Card
+
+Use:
+
+```yaml
+type: custom:golf-club-results-card
+player_entity: input_select.golf_active_player
+profile_bags_entity: input_text.golf_profile_bags_json
+metadata_entity: input_text.golf_club_metadata_json
+metadata_chunks: 8
+summary_entity_prefix: sensor.golf_summary
+```
+
+The card creates one visual result card for each saved club in the selected player's bag. It reads mapped data from MQTT discovery entities such as `sensor.golf_summary_tyler_bag` and stores manual brand, model, and image URL details in the chunked metadata helpers.

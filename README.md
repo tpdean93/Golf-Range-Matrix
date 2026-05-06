@@ -40,6 +40,8 @@ The logger publishes richer per-club analytics after every recorded or discarded
 - `golf/summary/<player>/bag`: all club summaries for the player.
 - `golf/export/<player>/ai`: AI-ready bag profile using schema `nova-golf-ai-export/v1`.
 
+The logger also publishes Home Assistant MQTT discovery for bag summaries, allowing the dashboard Results tab to read entities such as `sensor.golf_summary_tyler_bag`.
+
 Discarded shots are excluded from all analytics.
 
 ## Short Game / Wedge Matrix

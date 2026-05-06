@@ -75,6 +75,17 @@ AI-ready export:
 
 All summary/export topics are retained so Home Assistant can show the latest analytics without querying SQLite.
 
+The logger also publishes Home Assistant MQTT discovery configs for player bag summaries:
+
+`homeassistant/sensor/nova_shot_logger/summary_<player>_bag/config`
+
+For example, Tyler's bag summary is exposed as:
+
+- MQTT state/attribute topic: `golf/summary/tyler/bag`
+- HA entity: `sensor.golf_summary_tyler_bag`
+
+Depending on the Home Assistant MQTT discovery naming mode, the first generated entity may include the logger device name, such as `sensor.nova_shot_logger_golf_summary_tyler_bag`. It can be renamed in HA's entity registry without breaking the MQTT discovery `unique_id`.
+
 Per-club summaries include:
 
 - shot count

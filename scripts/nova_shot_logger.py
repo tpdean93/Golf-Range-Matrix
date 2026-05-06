@@ -27,6 +27,7 @@ DEFAULT_SHOT_TOPIC = "golf/shot/raw"
 DEFAULT_DISCARD_TOPIC = "golf/context/discard_last_shot"
 DEFAULT_SUMMARY_PREFIX = "golf/summary"
 DEFAULT_EXPORT_PREFIX = "golf/export"
+DEFAULT_DISCOVERY_PREFIX = "homeassistant"
 
 NUMERIC_FIELDS = {
     "carry": ("carry", "golf_carry", "carry_yards", "estimated_carry"),
@@ -106,6 +107,10 @@ def pick(payload: dict[str, Any], names: tuple[str, ...]) -> Any:
 def topic_segment(value: str) -> str:
     safe = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
     return "_".join(part for part in safe.split("_") if part) or "unknown"
+
+
+def readable_title(value: str) -> str:
+    return " ".join(part.capitalize() for part in topic_segment(value).split("_")) or "Unknown"
 
 
 def rounded(value: float | int | None, digits: int = 1) -> float | None:
@@ -294,6 +299,7 @@ class NovaShotLogger:
                 (self.args.discard_topic, 1),
             ]
         )
+        self.publish_discovery_for_known_players()
 
     def on_disconnect(self, client: mqtt.Client, userdata: Any, reason_code: Any, properties: Any = None) -> None:
         LOGGER.warning("Disconnected from MQTT with result %s", reason_code)
@@ -539,6 +545,7 @@ class NovaShotLogger:
     def publish_player_exports(self, player: str) -> None:
         bag_summary = self.build_bag_summary(player)
         player_slug = topic_segment(player)
+        self.publish_bag_summary_discovery(player)
         self.client.publish(
             f"{self.args.summary_prefix}/{player_slug}/bag",
             json.dumps(bag_summary, separators=(",", ":")),
@@ -551,6 +558,42 @@ class NovaShotLogger:
             qos=1,
             retain=True,
         )
+
+    def publish_bag_summary_discovery(self, player: str) -> None:
+        if not self.args.discovery_prefix:
+            return
+
+        player_slug = topic_segment(player)
+        state_topic = f"{self.args.summary_prefix}/{player_slug}/bag"
+        config_topic = f"{self.args.discovery_prefix}/sensor/nova_shot_logger/summary_{player_slug}_bag/config"
+        payload = {
+            "name": f"Golf Summary {readable_title(player)} Bag",
+            "object_id": f"golf_summary_{player_slug}_bag",
+            "unique_id": f"nova_shot_logger_summary_{player_slug}_bag",
+            "state_topic": state_topic,
+            "value_template": "{{ value_json.shot_count }}",
+            "json_attributes_topic": state_topic,
+            "icon": "mdi:golf",
+            "device": {
+                "identifiers": ["nova_shot_logger"],
+                "name": "NOVA Shot Logger",
+                "manufacturer": "NOVA",
+                "model": "MQTT Shot Logger",
+            },
+        }
+        self.client.publish(config_topic, json.dumps(payload, separators=(",", ":")), qos=1, retain=True)
+
+    def publish_discovery_for_known_players(self) -> None:
+        rows = self.db.execute(
+            """
+            select distinct player
+            from shots
+            where discarded = 0 and player is not null and player != ''
+            order by player
+            """
+        ).fetchall()
+        for row in rows:
+            self.publish_bag_summary_discovery(str(row["player"]))
 
     def publish_session_progress(self, session_id: str, player: str) -> None:
         rows = self.db.execute(
@@ -590,6 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discard-topic", default=os.getenv("NOVA_DISCARD_TOPIC", DEFAULT_DISCARD_TOPIC))
     parser.add_argument("--summary-prefix", default=os.getenv("NOVA_SUMMARY_PREFIX", DEFAULT_SUMMARY_PREFIX))
     parser.add_argument("--export-prefix", default=os.getenv("NOVA_EXPORT_PREFIX", DEFAULT_EXPORT_PREFIX))
+    parser.add_argument("--discovery-prefix", default=os.getenv("NOVA_DISCOVERY_PREFIX", DEFAULT_DISCOVERY_PREFIX))
     parser.add_argument(
         "--store-unrecorded",
         action="store_true",
