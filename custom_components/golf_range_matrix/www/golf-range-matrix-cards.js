@@ -4,6 +4,7 @@ const novaAttrs = (hass, entity) => novaState(hass, entity)?.attributes || {};
 const novaValue = (hass, entity) => novaState(hass, entity)?.state;
 const novaCall = (hass, service, data = {}) => hass.callService('golf_range_matrix', service, data);
 const novaDefine = (name, klass) => { if (!customElements.get(name)) customElements.define(name, klass); };
+const novaConfiguredEntity = (config, key, fallback) => (config?.entities?.[key] || config?.[`${key}_entity`] || fallback);
 
 const novaStyles = `
   <style>
@@ -17,8 +18,7 @@ class NovaShotTracerCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) { this._hass = hass; this.render(); }
   metric(key) {
-    const entities = this.config.entities || {};
-    const entity = entities[key] || `sensor.range_matrix_${key}`;
+    const entity = novaConfiguredEntity(this.config, key, `sensor.golf_range_matrix_range_matrix_${key}`);
     return Number(novaValue(this._hass, entity) || 0);
   }
   render() {
@@ -46,8 +46,12 @@ class GolfMetricPanelCard extends HTMLElement {
     const metrics = this.config.metrics || [
       ['carry', 'Carry', 'yd'], ['total', 'Total', 'yd'], ['ball_speed', 'Ball Speed', 'mph'], ['club_speed', 'Club Speed', 'mph'], ['smash_factor', 'Smash', ''], ['total_spin', 'Spin', 'rpm']
     ];
-    this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">${novaEsc(this.config.title || 'Range Matrix Metrics')}</p><div class="nova-grid">${metrics.map(([key,label,unit]) => {
-      const v = novaValue(this._hass, `sensor.range_matrix_${key}`);
+    this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">${novaEsc(this.config.title || 'Range Matrix Metrics')}</p><div class="nova-grid">${metrics.map((metric) => {
+      const key = Array.isArray(metric) ? metric[0] : metric.key;
+      const label = Array.isArray(metric) ? metric[1] : (metric.name || metric.label || key);
+      const unit = Array.isArray(metric) ? metric[2] : (metric.unit || '');
+      const entity = Array.isArray(metric) ? novaConfiguredEntity(this.config, key, `sensor.golf_range_matrix_range_matrix_${key}`) : metric.entity;
+      const v = novaValue(this._hass, entity);
       return `<div class="nova-tile"><div class="nova-label">${novaEsc(label)}</div><div class="nova-value">${v && v !== 'unknown' ? novaEsc(v) : '--'} <span class="nova-muted" style="font-size:13px">${novaEsc(unit)}</span></div></div>`;
     }).join('')}</div></div>`;
   }
@@ -57,7 +61,7 @@ class GolfShotHistoryCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) { this._hass = hass; this.render(); }
   render() {
-    const attrs = novaAttrs(this._hass, this.config.entity || 'sensor.range_matrix_latest_shot');
+    const attrs = novaAttrs(this._hass, this.config.entity || this.config.latest_shot_entity || 'sensor.golf_range_matrix_range_matrix_latest_shot');
     this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">Latest Shot</p><div class="nova-grid">
       ${['player','club','carry','total','offline','ball_speed','launch_angle','shot_rank'].map((key) => `<div class="nova-tile"><div class="nova-label">${novaEsc(key.replaceAll('_',' '))}</div><div class="nova-value">${novaEsc(attrs[key] ?? '--')}</div></div>`).join('')}
     </div></div>`;
@@ -68,14 +72,18 @@ class GolfSessionControlCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) { this._hass = hass; this.render(); }
   render() {
-    const workflow = novaAttrs(this._hass, 'sensor.range_matrix_workflow');
-    const player = novaValue(this._hass, 'select.range_matrix_active_player');
-    const club = novaValue(this._hass, 'select.range_matrix_active_club');
+    const workflowEntity = this.config.workflow_entity || 'sensor.golf_range_matrix_range_matrix_workflow';
+    const playerEntity = this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player';
+    const clubEntity = this.config.club_entity || 'select.golf_range_matrix_range_matrix_active_club';
+    const shotsEntity = this.config.shots_per_club_entity || 'number.golf_range_matrix_range_matrix_shots_per_club';
+    const workflow = novaAttrs(this._hass, workflowEntity);
+    const player = novaValue(this._hass, playerEntity);
+    const club = novaValue(this._hass, clubEntity);
     const count = workflow.bag_test_shot_count || 0;
-    const target = workflow.shots_per_club || novaValue(this._hass, 'number.range_matrix_shots_per_club') || 5;
+    const target = workflow.shots_per_club || novaValue(this._hass, shotsEntity) || 5;
     this.innerHTML = `${novaStyles}<div class="nova-card">
       <p class="nova-title">Session Controls</p><h2 class="nova-hero">${novaEsc(player)} / ${novaEsc(club)}</h2>
-      <p class="nova-muted">${novaEsc(novaValue(this._hass, 'sensor.range_matrix_workflow') || 'Casual')} &middot; Progress ${count}/${target}</p>
+      <p class="nova-muted">${novaEsc(novaValue(this._hass, workflowEntity) || 'Casual')} &middot; Progress ${count}/${target}</p>
       <div class="nova-actions">
         <button class="nova-btn" data-action="map">Map Club</button><button class="nova-btn" data-action="bag">Bag Test</button><button class="nova-btn secondary" data-action="discard">Discard</button><button class="nova-btn secondary" data-action="stop">Stop</button>
       </div>
@@ -91,8 +99,10 @@ class NovaBagBuilderCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) { this._hass = hass; this.render(); }
   render() {
-    const player = novaValue(this._hass, 'select.range_matrix_active_player') || 'Tyler';
-    const options = novaAttrs(this._hass, 'select.range_matrix_active_club').options || [];
+    const playerEntity = this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player';
+    const clubEntity = this.config.club_entity || 'select.golf_range_matrix_range_matrix_active_club';
+    const player = novaValue(this._hass, playerEntity) || 'Tyler';
+    const options = novaAttrs(this._hass, clubEntity).options || [];
     this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">Bag Builder</p><h2 class="nova-hero">${novaEsc(player)} Bag</h2>
       <textarea class="nova-input" rows="4" placeholder="One club per line">${novaEsc(options.join('\n'))}</textarea>
       <div class="nova-actions"><button class="nova-btn">Save Bag</button></div></div>`;
@@ -108,7 +118,7 @@ class NovaWedgeMatrixCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) { this._hass = hass; this.render(); }
   render() {
-    const player = novaValue(this._hass, 'select.range_matrix_active_player') || 'Tyler';
+    const player = novaValue(this._hass, this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player') || 'Tyler';
     this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">Wedge Matrix</p><h2 class="nova-hero">Saved in Range Matrix SQLite</h2>
       <textarea class="nova-input" rows="8" placeholder='{"PW":{"Half":80,"Full":120}}'></textarea>
       <div class="nova-actions"><button class="nova-btn">Save Matrix JSON</button></div></div>`;
@@ -124,14 +134,16 @@ class GolfClubResultsCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
   set hass(hass) {
     this._hass = hass;
-    const sig = JSON.stringify([novaValue(hass, 'select.range_matrix_active_player'), novaAttrs(hass, 'sensor.range_matrix_player_bag_summary')]);
+    const playerEntity = this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player';
+    const summaryEntity = this.config.summary_entity || 'sensor.golf_range_matrix_range_matrix_player_bag_summary';
+    const sig = JSON.stringify([novaValue(hass, playerEntity), novaAttrs(hass, summaryEntity)]);
     if (sig === this._sig) return;
     this._sig = sig;
     this.render();
   }
   render() {
-    const player = novaValue(this._hass, 'select.range_matrix_active_player') || 'Tyler';
-    const clubs = novaAttrs(this._hass, 'sensor.range_matrix_player_bag_summary').clubs || [];
+    const player = novaValue(this._hass, this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player') || 'Tyler';
+    const clubs = novaAttrs(this._hass, this.config.summary_entity || 'sensor.golf_range_matrix_range_matrix_player_bag_summary').clubs || [];
     this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">Results</p><h2 class="nova-hero">${novaEsc(player)} Club Results</h2><div class="nova-divider"></div>
       ${clubs.map((club, index) => this.club(player, club, index)).join('') || '<p class="nova-muted">Map a club to populate results.</p>'}</div>`;
     this.querySelectorAll('[data-save]').forEach((button) => button.addEventListener('click', (ev) => {
@@ -147,7 +159,7 @@ class GolfClubResultsCard extends HTMLElement {
   club(player, club, index) {
     const avg = club.averages || {};
     const playable = club.playable_yardage?.carry || {};
-    const meta = (novaAttrs(this._hass, 'sensor.range_matrix_player_bag_summary').metadata || {})[club.club] || {};
+    const meta = (novaAttrs(this._hass, this.config.summary_entity || 'sensor.golf_range_matrix_range_matrix_player_bag_summary').metadata || {})[club.club] || {};
     return `<div class="nova-tile nova-club" data-club="${novaEsc(club.club)}" style="margin:14px 0">
       ${meta.image_url ? `<img class="nova-img" src="${novaEsc(meta.image_url)}">` : `<div class="nova-img nova-fallback">GOLF</div>`}
       <div><h3 style="margin:0;font-size:24px">${novaEsc(club.club)}</h3><p class="nova-muted">${club.shot_count || 0} shots &middot; ${novaEsc(club.confidence?.rating || 'building')} confidence</p>

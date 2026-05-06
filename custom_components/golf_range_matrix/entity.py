@@ -15,11 +15,12 @@ class NovaGolfEntity(CoordinatorEntity[NovaGolfCoordinator]):
     """Base entity with common device metadata."""
 
     _attr_should_poll = False
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: NovaGolfCoordinator, key: str, name: str, icon: str | None = None) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{DOMAIN}_{key}"
-        self._attr_name = f"Range Matrix {name}"
+        self._attr_name = name
         if icon:
             self._attr_icon = icon
 
