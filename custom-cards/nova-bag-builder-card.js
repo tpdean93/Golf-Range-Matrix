@@ -8,6 +8,8 @@ class NovaBagBuilderCard extends HTMLElement {
       'PW', 'GW', '52 Wedge', '56 Wedge', '60 Wedge', 'Putter',
     ];
     this.bagEntities = this.config.bag_entities || {};
+    this.profileEntity = this.config.profiles_entity || 'input_text.golf_profiles_json';
+    this.profileBagsEntity = this.config.profile_bags_entity || 'input_text.golf_profile_bags_json';
     this.maxClubs = this.config.max_clubs || 14;
     this._draft = null;
     this._draftPlayer = null;
@@ -18,7 +20,9 @@ class NovaBagBuilderCard extends HTMLElement {
     this._hass = hass;
     if (this._optimisticSaved) {
       const state = hass.states?.[this._optimisticSaved.entity]?.state;
-      const actual = this.parseBag(state).join('|');
+      const actual = this._optimisticSaved.entity === this.profileBagsEntity
+        ? this.parseBag(this.parseJson(state, {})?.[this.player()]).join('|')
+        : this.parseBag(state).join('|');
       const expected = this._optimisticSaved.clubs.join('|');
       if (actual === expected || Date.now() - this._optimisticSaved.at > 3000) {
         this._optimisticSaved = null;
@@ -29,13 +33,28 @@ class NovaBagBuilderCard extends HTMLElement {
 
   getCardSize() { return 6; }
   esc(v) { return String(v ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])); }
+  parseJson(text, fallback) { try { return JSON.parse(text || ''); } catch { return fallback; } }
   state(e) { return this._hass?.states?.[e]; }
-  player() { return this.state(this.config.player_entity)?.state || 'Tyler'; }
+  players() {
+    const parsed = this.parseJson(this.state(this.profileEntity)?.state, null);
+    const players = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.players) ? parsed.players : this.config.players;
+    return (players || ['Tyler', 'Kids', 'Guest']).map(p => String(p).trim()).filter(Boolean);
+  }
+  player() { return this.state(this.config.player_entity)?.state || this.players()[0] || 'Tyler'; }
   bagEntity() { return this.bagEntities[this.player()] || this.bagEntities.Tyler || 'input_text.golf_tyler_bag'; }
   parseBag(value) { return String(value || '').split(',').map(s => s.trim()).filter(Boolean); }
+  chunkEntities(entity) { return [entity, `${entity}_2`, `${entity}_3`, `${entity}_4`]; }
+  chunkText(entity) { return this.chunkEntities(entity).map(e => this.state(e)?.state || '').join(''); }
+  saveChunked(entity, text) {
+    this.chunkEntities(entity).forEach((e, idx) => this.call('input_text', 'set_value', { entity_id: e, value: text.slice(idx * 240, (idx + 1) * 240) }));
+  }
+  bagMap() { return this.parseJson(this.chunkText(this.profileBagsEntity), {}) || {}; }
 
   savedBag() {
     const entity = this.bagEntity();
+    if (this._optimisticSaved && this._optimisticSaved.entity === this.profileBagsEntity) return this._optimisticSaved.clubs;
+    const fromMap = this.parseBag(this.bagMap()[this.player()]);
+    if (fromMap.length) return fromMap;
     if (this._optimisticSaved && this._optimisticSaved.entity === entity) return this._optimisticSaved.clubs;
     return this.parseBag(this.state(entity)?.state);
   }
@@ -100,16 +119,20 @@ class NovaBagBuilderCard extends HTMLElement {
 
   saveBag() {
     const clubs = this.selected().slice(0, this.maxClubs);
-    const entity = this.bagEntity();
-    this._optimisticSaved = { entity, clubs, at: Date.now() };
-    this.call('input_text', 'set_value', { entity_id: entity, value: clubs.join(',') });
+    const map = this.bagMap();
+    map[this.player()] = clubs.join(',');
+    this._optimisticSaved = { entity: this.profileBagsEntity, clubs, at: Date.now() };
+    this.saveChunked(this.profileBagsEntity, JSON.stringify(map));
+    const entity = this.bagEntities[this.player()];
+    if (entity) this.call('input_text', 'set_value', { entity_id: entity, value: clubs.join(',') });
+    this.call('input_select', 'set_options', { entity_id: this.config.club_entity, options: clubs.length ? clubs : ['None'] });
     if (!clubs.includes(this.state(this.config.club_entity)?.state) && clubs[0]) this.setActiveClub(clubs[0]);
     this.render();
   }
 
   renderPlayers() {
     const current = this.player();
-    return (this.config.players || ['Tyler', 'Kids', 'Guest'])
+    return this.players()
       .map(p => `<button class="pill ${p === current ? 'on' : ''}" data-player="${this.esc(p)}">${this.esc(p)}</button>`)
       .join('');
   }
@@ -168,6 +191,7 @@ class NovaBagBuilderCard extends HTMLElement {
 }
 
 if (!customElements.get('nova-bag-builder-card')) customElements.define('nova-bag-builder-card', NovaBagBuilderCard);
+if (!customElements.get('golf-bag-builder-card')) customElements.define('golf-bag-builder-card', NovaBagBuilderCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'nova-bag-builder-card',

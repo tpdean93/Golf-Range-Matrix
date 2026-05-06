@@ -7,9 +7,9 @@ The repo includes the custom dashboard pieces built for the NOVA launch monitor 
 - `nova-shot-tracer-card`: animated 300-yard driving-range shot tracer with carry, total, offline, grade, shot shape, and ball flight animation.
 - `golf-metric-panel-card`: reusable glass metric panel for scoring numbers, flight window, club delivery, and spin/result blocks.
 - `golf-shot-history-card`: last-50-shot charts with immediate live buffering plus recorder history.
-- `golf-session-control-card`: practice/session controls that follow the selected player's saved bag.
-- `nova-bag-builder-card`: per-player bag builder with custom clubs and 14-club max.
-- `nova-wedge-matrix-card`: short-game wedge matrix for swing type and wedge yardages.
+- `golf-session-control-card`: practice/session controls, dynamic player profiles, single-club mapping, and bag-test flow.
+- `nova-bag-builder-card`: dynamic per-player bag builder with custom clubs and 14-club max.
+- `nova-wedge-matrix-card`: short-game wedge matrix for swing type and wedge yardages, including 5-shot carry capture.
 
 ## Suggested Views
 

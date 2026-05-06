@@ -61,8 +61,28 @@ Per club:
 
 `golf/summary/<player>/<club>`
 
+Bag summary:
+
+`golf/summary/<player>/bag`
+
 Session progress:
 
 `golf/summary/session/<session_id>`
 
-Both are retained so Home Assistant can show the latest averages without querying SQLite.
+AI-ready export:
+
+`golf/export/<player>/ai`
+
+All summary/export topics are retained so Home Assistant can show the latest analytics without querying SQLite.
+
+Per-club summaries include:
+
+- shot count
+- averages for carry, total, offline, ball speed, club speed, smash factor, launch angle, launch direction, spin, and spin axis
+- carry, total, and offline confidence ranges (`p10_p90`, `p25_p75`, `min_max`, standard deviation)
+- playable carry/total yardage windows
+- left/right/center rates
+- tendency labels such as `slight left tendency`, `right miss pattern`, or `tight dispersion`
+- short `ai_notes`
+
+The AI export wraps the whole player bag in a stable JSON object with schema `nova-golf-ai-export/v1`.

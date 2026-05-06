@@ -9,6 +9,7 @@ import logging
 import os
 import signal
 import sqlite3
+import statistics
 import sys
 import time
 import uuid
@@ -25,6 +26,7 @@ DEFAULT_CONTEXT_TOPIC = "golf/context/current"
 DEFAULT_SHOT_TOPIC = "golf/shot/raw"
 DEFAULT_DISCARD_TOPIC = "golf/context/discard_last_shot"
 DEFAULT_SUMMARY_PREFIX = "golf/summary"
+DEFAULT_EXPORT_PREFIX = "golf/export"
 
 NUMERIC_FIELDS = {
     "carry": ("carry", "golf_carry", "carry_yards", "estimated_carry"),
@@ -104,6 +106,96 @@ def pick(payload: dict[str, Any], names: tuple[str, ...]) -> Any:
 def topic_segment(value: str) -> str:
     safe = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
     return "_".join(part for part in safe.split("_") if part) or "unknown"
+
+
+def rounded(value: float | int | None, digits: int = 1) -> float | None:
+    return None if value is None else round(float(value), digits)
+
+
+def compact_range(low: float | None, high: float | None, digits: int = 1) -> dict[str, float | None]:
+    return {"low": rounded(low, digits), "high": rounded(high, digits)}
+
+
+def percentile(values: list[float], pct: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * pct
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = rank - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def numeric_values(rows: list[sqlite3.Row], field: str) -> list[float]:
+    return [float(row[field]) for row in rows if row[field] is not None]
+
+
+def avg(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def stdev(values: list[float]) -> float | None:
+    return statistics.pstdev(values) if len(values) > 1 else None
+
+
+def confidence_range(values: list[float]) -> dict[str, Any]:
+    return {
+        "p10_p90": compact_range(percentile(values, 0.10), percentile(values, 0.90)),
+        "p25_p75": compact_range(percentile(values, 0.25), percentile(values, 0.75)),
+        "min_max": compact_range(min(values) if values else None, max(values) if values else None),
+        "standard_deviation": rounded(stdev(values)),
+    }
+
+
+def offline_label(avg_offline: float | None) -> str:
+    if avg_offline is None:
+        return "unknown"
+    if avg_offline <= -7:
+        return "left miss"
+    if avg_offline >= 7:
+        return "right miss"
+    if avg_offline < -2:
+        return "slight left tendency"
+    if avg_offline > 2:
+        return "slight right tendency"
+    return "centered"
+
+
+def dispersion_label(offline_values: list[float]) -> str:
+    if not offline_values:
+        return "unknown"
+    left_rate = sum(1 for value in offline_values if value < -5) / len(offline_values)
+    right_rate = sum(1 for value in offline_values if value > 5) / len(offline_values)
+    spread = (percentile(offline_values, 0.90) or 0) - (percentile(offline_values, 0.10) or 0)
+    if left_rate >= 0.45 and right_rate >= 0.25:
+        return "two-way miss, left leaning"
+    if right_rate >= 0.45 and left_rate >= 0.25:
+        return "two-way miss, right leaning"
+    if left_rate >= 0.45:
+        return "left miss pattern"
+    if right_rate >= 0.45:
+        return "right miss pattern"
+    if spread <= 12:
+        return "tight dispersion"
+    if spread >= 30:
+        return "wide dispersion"
+    return "balanced dispersion"
+
+
+def reliability_label(shot_count: int, carry_values: list[float]) -> str:
+    carry_sd = stdev(carry_values)
+    if shot_count < 5:
+        return "low sample"
+    if carry_sd is None:
+        return "building"
+    if shot_count >= 10 and carry_sd <= 5:
+        return "high"
+    if carry_sd <= 9:
+        return "medium"
+    return "low"
 
 
 class NovaShotLogger:
@@ -274,6 +366,7 @@ class NovaShotLogger:
 
         LOGGER.info("Recorded shot %s for %s / %s", row["id"], row["player"], row["club"])
         self.publish_summary(str(row["player"]), str(row["club"]))
+        self.publish_player_exports(str(row["player"]))
         if row["session_id"]:
             self.publish_session_progress(str(row["session_id"]), str(row["player"]))
 
@@ -292,7 +385,7 @@ class NovaShotLogger:
             params.append(player)
 
         row = self.db.execute(
-            f"select id, player, club from shots where {' and '.join(where)} order by received_at desc limit 1",
+            f"select id, player, club, session_id from shots where {' and '.join(where)} order by received_at desc limit 1",
             params,
         ).fetchone()
         if not row:
@@ -303,45 +396,161 @@ class NovaShotLogger:
         self.db.commit()
         LOGGER.info("Discarded shot %s", row["id"])
         self.publish_summary(row["player"], row["club"])
+        self.publish_player_exports(row["player"])
+        if row["session_id"]:
+            self.publish_session_progress(row["session_id"], row["player"])
 
-    def publish_summary(self, player: str, club: str) -> None:
-        row = self.db.execute(
+    def club_rows(self, player: str, club: str) -> list[sqlite3.Row]:
+        return self.db.execute(
             """
-            select count(*) as shot_count,
-              avg(carry) as avg_carry,
-              avg(total) as avg_total,
-              avg(offline) as avg_offline,
-              avg(ball_speed) as avg_ball_speed,
-              avg(club_speed) as avg_club_speed,
-              avg(smash_factor) as avg_smash_factor,
-              avg(launch_angle) as avg_launch_angle,
-              avg(total_spin) as avg_total_spin,
-              min(carry) as min_carry,
-              max(carry) as max_carry
+            select *
             from shots
             where discarded = 0 and player = ? and club = ?
+            order by received_at
             """,
             (player, club),
-        ).fetchone()
-        payload = {
+        ).fetchall()
+
+    def player_clubs(self, player: str) -> list[str]:
+        rows = self.db.execute(
+            """
+            select club, min(received_at) as first_seen
+            from shots
+            where discarded = 0 and player = ? and club is not null and club != ''
+            group by club
+            order by first_seen
+            """,
+            (player,),
+        ).fetchall()
+        return [str(row["club"]) for row in rows]
+
+    def build_club_summary(self, player: str, club: str) -> dict[str, Any]:
+        rows = self.club_rows(player, club)
+        carry = numeric_values(rows, "carry")
+        total = numeric_values(rows, "total")
+        offline = numeric_values(rows, "offline")
+        ball_speed = numeric_values(rows, "ball_speed")
+        club_speed = numeric_values(rows, "club_speed")
+        smash_factor = numeric_values(rows, "smash_factor")
+        launch_angle = numeric_values(rows, "launch_angle")
+        launch_direction = numeric_values(rows, "launch_direction")
+        total_spin = numeric_values(rows, "total_spin")
+        spin_axis = numeric_values(rows, "spin_axis")
+        avg_offline = avg(offline)
+        shot_count = len(rows)
+        carry_window = confidence_range(carry)
+        tendency = {
+            "direction": offline_label(avg_offline),
+            "dispersion": dispersion_label(offline),
+            "avg_offline": rounded(avg_offline),
+            "left_rate": rounded(sum(1 for value in offline if value < -5) / len(offline), 2) if offline else None,
+            "right_rate": rounded(sum(1 for value in offline if value > 5) / len(offline), 2) if offline else None,
+            "center_rate": rounded(sum(1 for value in offline if -5 <= value <= 5) / len(offline), 2) if offline else None,
+        }
+        playable_low = percentile(carry, 0.25)
+        playable_high = percentile(carry, 0.75)
+        reliability = reliability_label(shot_count, carry)
+        notes = []
+        if carry:
+            notes.append(
+                f"Typical carry {rounded(playable_low)}-{rounded(playable_high)} yd"
+                if playable_low is not None and playable_high is not None
+                else f"Average carry {rounded(avg(carry))} yd"
+            )
+        notes.append(tendency["dispersion"])
+        notes.append(tendency["direction"])
+        notes.append(f"{reliability} confidence")
+        return {
             "player": player,
             "club": club,
-            "shot_count": row["shot_count"],
+            "shot_count": shot_count,
+            "last_shot_at": rows[-1]["received_at"] if rows else None,
             "averages": {
-                "carry": row["avg_carry"],
-                "total": row["avg_total"],
-                "offline": row["avg_offline"],
-                "ball_speed": row["avg_ball_speed"],
-                "club_speed": row["avg_club_speed"],
-                "smash_factor": row["avg_smash_factor"],
-                "launch_angle": row["avg_launch_angle"],
-                "total_spin": row["avg_total_spin"],
+                "carry": rounded(avg(carry)),
+                "total": rounded(avg(total)),
+                "offline": rounded(avg_offline),
+                "ball_speed": rounded(avg(ball_speed)),
+                "club_speed": rounded(avg(club_speed)),
+                "smash_factor": rounded(avg(smash_factor), 2),
+                "launch_angle": rounded(avg(launch_angle)),
+                "launch_direction": rounded(avg(launch_direction)),
+                "total_spin": rounded(avg(total_spin), 0),
+                "spin_axis": rounded(avg(spin_axis)),
             },
-            "carry_range": {"min": row["min_carry"], "max": row["max_carry"]},
-            "updated_at": utc_now(),
+            "confidence": {
+                "rating": reliability,
+                "carry": carry_window,
+                "total": confidence_range(total),
+                "offline": confidence_range(offline),
+                "sample_size": shot_count,
+            },
+            "playable_yardage": {
+                "carry": compact_range(playable_low, playable_high),
+                "total": compact_range(percentile(total, 0.25), percentile(total, 0.75)),
+            },
+            "tendencies": tendency,
+            "ai_notes": "; ".join(note for note in notes if note),
         }
+
+    def publish_summary(self, player: str, club: str) -> None:
+        payload = self.build_club_summary(player, club)
+        payload["updated_at"] = utc_now()
         topic = f"{self.args.summary_prefix}/{topic_segment(player)}/{topic_segment(club)}"
         self.client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1, retain=True)
+
+    def build_bag_summary(self, player: str) -> dict[str, Any]:
+        clubs = [self.build_club_summary(player, club) for club in self.player_clubs(player)]
+        return {
+            "player": player,
+            "club_count": len(clubs),
+            "shot_count": sum(club["shot_count"] for club in clubs),
+            "clubs": clubs,
+            "updated_at": utc_now(),
+        }
+
+    def build_ai_export(self, player: str) -> dict[str, Any]:
+        bag_summary = self.build_bag_summary(player)
+        return {
+            "schema": "nova-golf-ai-export/v1",
+            "player": player,
+            "generated_at": bag_summary["updated_at"],
+            "purpose": "Use this profile to reason about realistic club selection, expected distances, dispersion, and misses.",
+            "bag": [
+                {
+                    "club": club["club"],
+                    "shot_count": club["shot_count"],
+                    "confidence": club["confidence"]["rating"],
+                    "expected_carry_yards": club["averages"]["carry"],
+                    "playable_carry_yards": club["playable_yardage"]["carry"],
+                    "carry_80_percent_window": club["confidence"]["carry"]["p10_p90"],
+                    "expected_total_yards": club["averages"]["total"],
+                    "offline_tendency": club["tendencies"]["direction"],
+                    "dispersion_tendency": club["tendencies"]["dispersion"],
+                    "avg_offline_yards": club["tendencies"]["avg_offline"],
+                    "launch_angle": club["averages"]["launch_angle"],
+                    "spin": club["averages"]["total_spin"],
+                    "notes": club["ai_notes"],
+                }
+                for club in bag_summary["clubs"]
+            ],
+            "raw_summary": bag_summary,
+        }
+
+    def publish_player_exports(self, player: str) -> None:
+        bag_summary = self.build_bag_summary(player)
+        player_slug = topic_segment(player)
+        self.client.publish(
+            f"{self.args.summary_prefix}/{player_slug}/bag",
+            json.dumps(bag_summary, separators=(",", ":")),
+            qos=1,
+            retain=True,
+        )
+        self.client.publish(
+            f"{self.args.export_prefix}/{player_slug}/ai",
+            json.dumps(self.build_ai_export(player), separators=(",", ":")),
+            qos=1,
+            retain=True,
+        )
 
     def publish_session_progress(self, session_id: str, player: str) -> None:
         rows = self.db.execute(
@@ -380,6 +589,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--shot-topic", default=os.getenv("NOVA_SHOT_TOPIC", DEFAULT_SHOT_TOPIC))
     parser.add_argument("--discard-topic", default=os.getenv("NOVA_DISCARD_TOPIC", DEFAULT_DISCARD_TOPIC))
     parser.add_argument("--summary-prefix", default=os.getenv("NOVA_SUMMARY_PREFIX", DEFAULT_SUMMARY_PREFIX))
+    parser.add_argument("--export-prefix", default=os.getenv("NOVA_EXPORT_PREFIX", DEFAULT_EXPORT_PREFIX))
     parser.add_argument(
         "--store-unrecorded",
         action="store_true",

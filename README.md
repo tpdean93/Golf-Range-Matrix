@@ -27,10 +27,20 @@ Set `MQTT_USERNAME` and `MQTT_PASSWORD` in `.env` if your broker requires authen
 1. Home Assistant publishes retained context to `golf/context/current`.
 2. The lab PC / OBS bridge publishes each shot to `golf/shot/raw`.
 3. The logger combines both payloads and writes SQLite records.
-4. The logger publishes retained summaries to `golf/summary/...`.
+4. The logger publishes retained summaries to `golf/summary/...` and AI-ready exports to `golf/export/...`.
 5. Home Assistant can display those summaries on the NOVA dashboard.
 
 By default, only shots with `recording: true` in the HA context are stored. Set `NOVA_STORE_UNRECORDED=true` to keep every shot.
+
+## Analytics / AI Export
+
+The logger publishes richer per-club analytics after every recorded or discarded shot:
+
+- `golf/summary/<player>/<club>`: club averages, confidence windows, tendencies, and playable yardage.
+- `golf/summary/<player>/bag`: all club summaries for the player.
+- `golf/export/<player>/ai`: AI-ready bag profile using schema `nova-golf-ai-export/v1`.
+
+Discarded shots are excluded from all analytics.
 
 ## Short Game / Wedge Matrix
 

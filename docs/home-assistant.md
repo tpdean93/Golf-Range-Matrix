@@ -23,6 +23,16 @@ The dashboard card expects these helpers:
 
 - `input_select.golf_active_player`
 - `input_select.golf_active_club`
+- `input_text.golf_profiles_json`
+- `input_text.golf_profile_bags_json`
+- `input_text.golf_profile_bags_json_2`
+- `input_text.golf_profile_bags_json_3`
+- `input_text.golf_profile_bags_json_4`
+- `input_text.golf_profile_wedge_matrices_json`
+- `input_text.golf_profile_wedge_matrices_json_2`
+- `input_text.golf_profile_wedge_matrices_json_3`
+- `input_text.golf_profile_wedge_matrices_json_4`
+- `input_boolean.golf_club_mapping_active`
 - `input_text.golf_tyler_bag`
 - `input_text.golf_kids_bag`
 - `input_text.golf_guest_bag`
@@ -49,6 +59,8 @@ Use:
 type: custom:nova-bag-builder-card
 player_entity: input_select.golf_active_player
 club_entity: input_select.golf_active_club
+profiles_entity: input_text.golf_profiles_json
+profile_bags_entity: input_text.golf_profile_bags_json
 max_clubs: 14
 bag_entities:
   Tyler: input_text.golf_tyler_bag
@@ -80,7 +92,7 @@ catalog:
   - Putter
 ```
 
-The card enforces the 14-club max in the UI, supports custom club names, and writes the selected bag to the active player's `input_text`.
+The card enforces the 14-club max in the UI, supports custom club names, and writes the selected bag to the dynamic profile bag store. The legacy per-player bag helpers can remain configured as a compatibility mirror for the starter profiles.
 
 ## Wedge Matrix Card
 
@@ -92,6 +104,9 @@ player_entity: input_select.golf_active_player
 club_entity: input_select.golf_active_club
 carry_entity: sensor.golf_carry
 capture_shots: 5
+profiles_entity: input_text.golf_profiles_json
+profile_bags_entity: input_text.golf_profile_bags_json
+profile_matrices_entity: input_text.golf_profile_wedge_matrices_json
 bag_entities:
   Tyler: input_text.golf_tyler_bag
   Kids: input_text.golf_kids_bag
@@ -118,8 +133,9 @@ To auto-fill a yardage:
 1. Click the cell for the saved wedge and swing type.
 2. Click `Start` in the 5-shot capture panel.
 3. Hit 5 shots. The card watches `sensor.golf_carry`.
-4. The cell is filled with the carry average.
-5. Click `Save Matrix`.
+4. If one is a bad ball, click `Throw Out Last` before the fifth accepted shot.
+5. The cell is filled with the carry average.
+6. Click `Save Matrix`.
 
 The matrix stores compact text like:
 
