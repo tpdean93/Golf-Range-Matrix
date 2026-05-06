@@ -14,7 +14,7 @@ The repo includes the custom dashboard pieces built for the NOVA launch monitor 
 
 ## Suggested Views
 
-- `NOVA`: main launch monitor view with shot tracer on the left and metric panels/history on the right.
+- `Range Matrix`: main launch monitor view with shot tracer on the left and metric panels/history on the right.
 - `Numbers`: raw OpenGolfCoach/NOVA metric tiles for debugging.
 - `Practice`: session controls, bag builder, wedge matrix, and MQTT contract.
 - `Results`: per-player club cards showing mapped averages, playable yardages, tendencies, confidence, and editable club details.

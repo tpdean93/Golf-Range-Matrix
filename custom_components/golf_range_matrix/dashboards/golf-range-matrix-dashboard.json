@@ -1,0 +1,89 @@
+{
+  "title": "Golf Range Matrix",
+  "resources": [
+    {
+      "url": "/golf_range_matrix/golf-range-matrix-cards.js",
+      "type": "module"
+    }
+  ],
+  "views": [
+    {
+      "title": "Launch Monitor",
+      "path": "launch-monitor",
+      "icon": "mdi:golf",
+      "type": "sections",
+      "max_columns": 3,
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "custom:range-shot-tracer-card"
+            },
+            {
+              "type": "custom:range-metric-panel-card",
+              "title": "Live Numbers"
+            },
+            {
+              "type": "custom:range-shot-history-card"
+            }
+          ]
+        }
+      ],
+      "cards": []
+    },
+    {
+      "title": "Practice",
+      "path": "practice",
+      "icon": "mdi:target",
+      "type": "sections",
+      "max_columns": 3,
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "custom:range-session-control-card"
+            },
+            {
+              "type": "entities",
+              "title": "Native Range Matrix Controls",
+              "entities": [
+                "select.range_matrix_active_player",
+                "select.range_matrix_active_club",
+                "switch.range_matrix_recording",
+                "number.range_matrix_shots_per_club",
+                "sensor.range_matrix_workflow"
+              ]
+            },
+            {
+              "type": "custom:range-wedge-matrix-card"
+            },
+            {
+              "type": "custom:range-bag-builder-card"
+            }
+          ]
+        }
+      ],
+      "cards": []
+    },
+    {
+      "title": "Results",
+      "path": "results",
+      "icon": "mdi:clipboard-text-search",
+      "type": "sections",
+      "max_columns": 2,
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "custom:range-club-results-card"
+            }
+          ]
+        }
+      ],
+      "cards": []
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Golf Range Matrix",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Golf Range Matrix",
+        "description": "Configure the MQTT topics used by the launch monitor bridge.",
+        "data": {
+          "shot_topic": "Raw shot MQTT topic",
+          "context_topic": "Context MQTT topic",
+          "store_unrecorded": "Store shots while recording is off"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Golf Range Matrix options",
+        "data": {
+          "shot_topic": "Raw shot MQTT topic",
+          "context_topic": "Context MQTT topic",
+          "store_unrecorded": "Store shots while recording is off",
+          "enable_influx": "Enable optional InfluxDB export",
+          "influx_url": "InfluxDB URL",
+          "influx_token": "InfluxDB token",
+          "influx_org": "InfluxDB organization",
+          "influx_bucket": "InfluxDB bucket"
+        }
+      }
+    }
+  }
+}

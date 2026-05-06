@@ -1,0 +1,117 @@
+save_profile:
+  name: Save profile
+  description: Create or replace Range Matrix player profiles.
+  fields:
+    player:
+      name: Player
+      description: Single player name to add.
+      selector:
+        text:
+    players:
+      name: Players
+      description: Full list of player names.
+      selector:
+        object:
+
+save_bag:
+  name: Save bag
+  description: Save a player's 14-club bag.
+  fields:
+    player:
+      required: true
+      selector:
+        text:
+    clubs:
+      required: true
+      selector:
+        object:
+
+save_club_metadata:
+  name: Save club metadata
+  description: Save brand, model, and image URL for one club.
+  fields:
+    player:
+      required: true
+      selector:
+        text:
+    club:
+      required: true
+      selector:
+        text:
+    brand:
+      selector:
+        text:
+    model:
+      selector:
+        text:
+    image_url:
+      selector:
+        text:
+
+save_wedge_matrix:
+  name: Save wedge matrix
+  description: Save a player's wedge matrix JSON.
+  fields:
+    player:
+      required: true
+      selector:
+        text:
+    matrix:
+      required: true
+      selector:
+        object:
+
+start_mapping:
+  name: Start mapping
+  description: Start a single-club mapping session.
+  fields:
+    player:
+      selector:
+        text:
+    club:
+      selector:
+        text:
+
+stop_session:
+  name: Stop session
+  description: Stop recording and reset mapping workflow state.
+
+start_bag_test:
+  name: Start bag test
+  description: Start a full-bag mapping workflow.
+  fields:
+    player:
+      selector:
+        text:
+
+discard_last_shot:
+  name: Discard last shot
+  description: Mark the latest shot as discarded and recalculate summaries.
+  fields:
+    player:
+      selector:
+        text:
+    session_id:
+      selector:
+        text:
+
+import_helpers:
+  name: Import prototype helpers
+  description: Import data from old input_text/input_select helper storage.
+
+export_backup:
+  name: Export backup
+  description: Return a JSON backup payload containing Range Matrix app data and shots.
+
+import_backup:
+  name: Import backup
+  description: Import a Golf Range Matrix backup payload.
+  fields:
+    backup:
+      required: true
+      selector:
+        object:
+
+create_dashboard:
+  name: Create dashboard
+  description: Log the bundled dashboard template location for setup tools.

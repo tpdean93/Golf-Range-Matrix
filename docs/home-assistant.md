@@ -1,5 +1,18 @@
 # Home Assistant Setup
 
+## Recommended HACS Setup
+
+The recommended path is now the `Golf Range Matrix` custom integration in `custom_components/golf_range_matrix`.
+
+- Install the repo through HACS as an integration.
+- Add `Golf Range Matrix` from Settings > Devices & services.
+- Add `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource.
+- Use `golf_range_matrix.import_helpers` once if you need to migrate valid data from the old helper prototype.
+
+The integration owns `golf_range_matrix.sqlite3` in the Home Assistant config directory. New installs do not need the helper list below.
+
+## Legacy Prototype Setup
+
 This project is meant to stay separate from your HOA app repo. Home Assistant remains the control surface, while the logger runs locally on the HA box, lab PC, or any machine that can reach the MQTT broker.
 
 ## Custom Card Resources
