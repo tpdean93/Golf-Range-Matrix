@@ -19,6 +19,8 @@ This repo contains:
 
 The recommended product path is now `Golf Range Matrix` as a Home Assistant custom integration:
 
+[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tpdean93&repository=nova-bag-builder-shot-logger&category=integration)
+
 1. Add this repo to HACS as a custom integration repository.
 2. Install `Golf Range Matrix`.
 3. Restart Home Assistant.
@@ -34,6 +36,15 @@ The optional local Swing Analyzer service lives in `tools/swing-analyzer/`. It s
 Range Matrix publishes retained selected-player/selected-club context to `golf/context/current`, so the analyzer labels swings with the dashboard-selected club instead of any stale club value coming from the OBS shot payload. The bundled card resource also includes `custom:range-swing-video-card`, a compact looping video card with an on/off control for the analyzer MQTT switch.
 
 See `tools/swing-analyzer/README.md` for install steps, OBS replay-buffer setup, the `mqtt_swing` user, paho-mqtt installation into OBS, firewall notes for the analyzer HTTP server, LLM coaching options, and camera/FPS guidance. OBS Replay Buffer must be started in OBS before `SaveReplayBuffer` can produce source MP4s. Annotated videos default to 0.5x speed via `annotation.slow_motion_factor` in the analyzer config.
+
+At a high level, the working setup is:
+
+1. Install `Golf Range Matrix` in Home Assistant through HACS and add `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource.
+2. Configure the OBS Open Golf Coach script on the sim PC to publish shots to MQTT topic `golf/shot/raw`.
+3. Install the Swing Analyzer Python service on the sim PC from `tools/swing-analyzer/`; its `requirements.txt` installs MediaPipe, OpenCV, Flask, paho-mqtt, OBS WebSocket support, and ffmpeg helpers.
+4. Configure OBS Replay Buffer and OBS WebSocket. OBS must have Replay Buffer started so `SaveReplayBuffer` can write MP4s.
+5. Let Range Matrix publish selected player/club context to `golf/context/current`; the analyzer uses that retained context so the overlay matches the dashboard-selected club.
+6. Open TCP `8765` on the sim PC firewall. Home Assistant and dashboard browsers fetch annotated MP4s from the analyzer HTTP server at `http://<sim-pc-ip>:8765/videos/...`.
 
 ## Run The Logger
 

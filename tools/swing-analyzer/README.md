@@ -34,6 +34,19 @@ The analyzer does not write to Range Matrix SQLite. Range Matrix remains the can
 
 ---
 
+## What Runs Where
+
+Use this split when debugging or explaining the install:
+
+- **Home Assistant** runs MQTT/Mosquitto, the `Golf Range Matrix` HACS integration, the Range Matrix dashboard, and MQTT discovery entities for the analyzer.
+- **Sim PC** runs OBS, the Open Golf Coach OBS script, OBS Replay Buffer, OBS WebSocket, and this Python Swing Analyzer service.
+- **MQTT is the event bus.** OBS publishes each Nova shot to `golf/shot/raw`; Range Matrix and the Swing Analyzer both subscribe to that same event. Range Matrix publishes retained context to `golf/context/current`, and the analyzer subscribes to that context.
+- **TCP/HTTP is only for video playback.** The analyzer runs a tiny Flask server on TCP `8765` so Home Assistant dashboards can fetch annotated MP4s from URLs like `http://192.168.68.150:8765/videos/annotated/<file>.mp4`.
+
+That means a shot can be logged successfully through MQTT while the dashboard video still fails if Windows Firewall blocks TCP `8765` or `server.public_base_url` points at the wrong sim PC IP.
+
+---
+
 ## One-time setup on the Windows sim PC
 
 ### 1. Python
@@ -46,6 +59,18 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
+
+This installs the analysis/runtime stack:
+
+- `mediapipe` for pose landmarks.
+- `opencv-python` and `numpy` for video/frame processing.
+- `imageio-ffmpeg` for browser-playable H.264 MP4 output.
+- `watchdog` to detect new OBS replay files.
+- `flask` to serve annotated/raw clips over TCP `8765`.
+- `paho-mqtt` for shot/context/enable topics and HA discovery.
+- `obsws-python` to call OBS WebSocket `SaveReplayBuffer`.
+
+The MediaPipe pose model downloads into `models/` on first run. That folder is local cache and should not be committed.
 
 ### 2. OBS replay buffer
 
@@ -68,7 +93,32 @@ In OBS Studio:
 - If you set a password, copy it.
 - Update `obs.port` and `obs.password` in `config.yaml`.
 
-### 4. Configure the analyzer
+### 4. Open Golf Coach OBS Script
+
+The OBS Open Golf Coach script is the TCP/client side of the Nova connection and the MQTT producer for Range Matrix/Swing Analyzer:
+
+```text
+Nova/OpenLaunch -> OBS Open Golf Coach script -> MQTT golf/shot/raw
+```
+
+In OBS, open the Open Golf Coach script properties and configure the MQTT section:
+
+- Enable `Publish Shots to MQTT (Range Matrix / Swing Analyzer)`.
+- `MQTT Broker Host`: your Home Assistant/Mosquitto host or IP.
+- `MQTT Broker Port`: usually `1883`.
+- `MQTT Username`: the Home Assistant user account used for MQTT, for example `mqtt_swing`.
+- `MQTT Password`: that user's password.
+- `MQTT Topic`: `golf/shot/raw`.
+
+The OBS script uses `paho-mqtt`. If OBS's embedded Open Golf Coach Python environment does not have it, install it into the OBS script package path:
+
+```powershell
+py -3.12 -m pip install --target "$env:APPDATA\obs-studio\ogc-python\Lib\site-packages" paho-mqtt
+```
+
+The OBS script still publishes the existing Home Assistant REST sensors if you use them. MQTT publishing is additive and is what lets Range Matrix and Swing Analyzer both consume the same shot.
+
+### 5. Configure the analyzer
 
 Copy `config.example.yaml` to `config.yaml`, then edit it:
 
@@ -83,7 +133,7 @@ Copy `config.example.yaml` to `config.yaml`, then edit it:
 
 If the dashboard browser is not on the sim PC, allow inbound TCP `8765` through Windows Firewall. Home Assistant and kiosk clients fetch annotated MP4s directly from `server.public_base_url`.
 
-### 5. Run the analyzer
+### 6. Run the analyzer
 
 ```powershell
 cd C:\nova-bag-builder-shot-logger\tools\swing-analyzer
@@ -100,7 +150,7 @@ Connected to OBS at 127.0.0.1:4455
 MQTT subscribed to shot=golf/shot/raw context=golf/context/current enable=golf/swing/analyzer/enabled
 ```
 
-### 6. Home Assistant side
+### 7. Home Assistant side
 
 When the service starts, MQTT discovery creates a `Golf Swing Analyzer` device. Home Assistant commonly prefixes entity IDs with the device name, so the default entities are:
 
@@ -117,6 +167,21 @@ When the service starts, MQTT discovery creates a `Golf Swing Analyzer` device. 
 Add the `ha_dashboard_swing.yaml` view to the Range Matrix dashboard, or use the bundled dashboard template in the integration. The bundled `/golf_range_matrix/golf-range-matrix-cards.js` resource includes `custom:range-swing-video-card`, which loops the latest annotated MP4 and includes a compact analyzer on/off control.
 
 Range Matrix also publishes retained context to `golf/context/current` whenever the selected player, club, recording state, or workflow changes. The analyzer applies that context before saving shot JSON, so the annotated overlay and MQTT sensors use the club selected in the dashboard.
+
+---
+
+## End-to-end Setup Checklist
+
+1. Home Assistant: install Mosquitto/MQTT and create an MQTT-capable HA user such as `mqtt_swing`.
+2. Home Assistant: install `Golf Range Matrix` through HACS, add the integration from Settings > Devices & services, and register `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource.
+3. Home Assistant: open the bundled dashboard template or add `custom:range-swing-video-card` to your existing Range Matrix dashboard.
+4. OBS: configure Open Golf Coach to publish MQTT shots to `golf/shot/raw`.
+5. OBS: enable and start Replay Buffer, set raw recording path to the analyzer `paths.raw_video_dir`, and enable OBS WebSocket.
+6. Sim PC: create the Python venv, install `requirements.txt`, copy `config.example.yaml` to `config.yaml`, and fill in MQTT, OBS, server, and camera settings.
+7. Sim PC: allow inbound TCP `8765` in Windows Firewall.
+8. Sim PC: run `python run.py` and confirm the MQTT subscription log line.
+9. Home Assistant: turn on the Swing Analyzer switch.
+10. Hit a shot. Within about 30 seconds the latest swing sensors should update and the dashboard video should loop the annotated MP4.
 
 ---
 

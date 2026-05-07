@@ -4,6 +4,10 @@
 
 Topic: `golf/context/current`
 
+Publisher: `Golf Range Matrix` Home Assistant integration.
+
+Consumers: local shot logger and Swing Analyzer service.
+
 Retained JSON payload:
 
 ```json
@@ -20,9 +24,15 @@ Retained JSON payload:
 }
 ```
 
+The Swing Analyzer treats this retained context as authoritative for `player`, `club`, and `session_id`. This is intentional: the dashboard-selected club should win over any stale club value coming from the OBS/Open Golf Coach shot payload.
+
 ## Raw Shot From Lab PC / OBS Bridge
 
 Topic: `golf/shot/raw`
+
+Publisher: OBS Open Golf Coach script on the sim PC.
+
+Consumers: `Golf Range Matrix`, local shot logger, and Swing Analyzer service.
 
 Publish one JSON message per shot:
 
@@ -48,6 +58,23 @@ Publish one JSON message per shot:
 ```
 
 The logger also accepts common aliases like `ballSpeed`, `launchAngle`, and `golf_ball_speed`.
+
+## Swing Analyzer MQTT Topics
+
+The Swing Analyzer service subscribes to:
+
+- `golf/shot/raw`: shot JSON from the OBS Open Golf Coach script.
+- `golf/context/current`: retained Range Matrix context. The analyzer applies this context before writing shot JSON or drawing the annotated video overlay.
+- `golf/swing/analyzer/enabled`: retained `on`/`off` state for the analyzer switch.
+
+The Swing Analyzer publishes:
+
+- `golf/swing/analysis/availability`: retained `online`/`offline`.
+- `golf/swing/analysis/latest`: retained JSON for the most recent analysis.
+- `golf/swing/analysis/recent`: retained JSON list of recent analyses.
+- Home Assistant MQTT discovery configs under `homeassistant/switch/golf_swing_analyzer/enabled/config` and `homeassistant/sensor/golf_swing_analyzer/<id>/config`.
+
+The analyzer's MP4 playback is not MQTT. Annotated/raw video files are served directly from the sim PC over HTTP, usually on TCP port `8765`, using URLs published in `golf/swing/analysis/latest`.
 
 ## Discard Last Shot
 
