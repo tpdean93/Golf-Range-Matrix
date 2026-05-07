@@ -95,6 +95,19 @@ discard_last_shot:
       selector:
         text:
 
+reset_club_shots:
+  name: Reset club shots
+  description: Discard every saved shot for one player's club and recalculate summaries.
+  fields:
+    player:
+      required: true
+      selector:
+        text:
+    club:
+      required: true
+      selector:
+        text:
+
 import_helpers:
   name: Import prototype helpers
   description: Import data from old input_text/input_select helper storage.

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .const import DEFAULT_CATALOG, DEFAULT_SHOTS_PER_CLUB, METRIC_FIELDS, TEXT_FIELDS
+from .const import DEFAULT_CATALOG, DEFAULT_SHOTS_PER_CLUB, METRIC_FIELDS, TEXT_FIELDS, sort_clubs
 
 
 def utc_now() -> str:
@@ -286,7 +286,7 @@ class NovaGolfStore:
         with self._connect() as db:
             players = [row["name"] for row in db.execute("select name from players order by name").fetchall()]
             bags = {
-                row["player"]: json.loads(row["clubs_json"])
+                row["player"]: sort_clubs(json.loads(row["clubs_json"]))
                 for row in db.execute("select player, clubs_json from player_bags").fetchall()
             }
             matrices = {
@@ -356,7 +356,7 @@ class NovaGolfStore:
 
     def save_bag(self, player: str, clubs: list[str]) -> None:
         """Persist a player bag."""
-        cleaned = [club.strip() for club in clubs if str(club).strip()][:14]
+        cleaned = sort_clubs([club.strip() for club in clubs if str(club).strip()])[:14]
         with self._connect() as db:
             db.execute(
                 """
@@ -451,6 +451,19 @@ class NovaGolfStore:
                 return None
             db.execute("update shots set discarded = 1, discarded_at = ? where id = ?", (utc_now(), row["id"]))
             return dict(row)
+
+    def reset_club_shots(self, player: str, club: str) -> int:
+        """Discard every saved shot for a player/club mapping."""
+        with self._connect() as db:
+            cursor = db.execute(
+                """
+                update shots
+                set discarded = 1, discarded_at = ?
+                where discarded = 0 and player = ? and club = ?
+                """,
+                (utc_now(), player, club),
+            )
+            return int(cursor.rowcount or 0)
 
     def session_club_count(self, session_id: str | None, player: str, club: str) -> int:
         """Return valid shot count for the active workflow session and club."""
@@ -562,7 +575,7 @@ class NovaGolfStore:
         bag = self.state_bag(player)
         shot_clubs = self.player_clubs(player)
         clubs = []
-        for club in [*bag, *[club for club in shot_clubs if club not in bag]]:
+        for club in sort_clubs([*bag, *[club for club in shot_clubs if club not in bag]]):
             clubs.append(self.build_club_summary(player, club))
         return {
             "player": player,
@@ -579,7 +592,7 @@ class NovaGolfStore:
         if not row:
             return []
         try:
-            return json.loads(row["clubs_json"])
+            return sort_clubs(json.loads(row["clubs_json"]))
         except json.JSONDecodeError:
             return []
 

@@ -31,6 +31,7 @@ SERVICE_START_MAPPING = "start_mapping"
 SERVICE_STOP_SESSION = "stop_session"
 SERVICE_START_BAG_TEST = "start_bag_test"
 SERVICE_DISCARD_LAST_SHOT = "discard_last_shot"
+SERVICE_RESET_CLUB_SHOTS = "reset_club_shots"
 SERVICE_IMPORT_HELPERS = "import_helpers"
 SERVICE_EXPORT_BACKUP = "export_backup"
 SERVICE_IMPORT_BACKUP = "import_backup"
@@ -152,6 +153,9 @@ def _async_register_services(hass: HomeAssistant) -> None:
     async def discard_last_shot(call: ServiceCall) -> None:
         await _coordinator(hass).async_discard_last_shot(call.data.get("player"), call.data.get("session_id"))
 
+    async def reset_club_shots(call: ServiceCall) -> None:
+        await _coordinator(hass).async_reset_club_shots(str(call.data["player"]), str(call.data["club"]))
+
     async def import_helpers(call: ServiceCall) -> None:
         coordinator = _coordinator(hass)
         legacy = read_legacy_helpers(hass)
@@ -247,6 +251,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_DISCARD_LAST_SHOT,
         discard_last_shot,
         schema=vol.Schema({vol.Optional("player"): cv.string, vol.Optional("session_id"): cv.string}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESET_CLUB_SHOTS,
+        reset_club_shots,
+        schema=vol.Schema({vol.Required("player"): cv.string, vol.Required("club"): cv.string}),
     )
     hass.services.async_register(DOMAIN, SERVICE_IMPORT_HELPERS, import_helpers)
     hass.services.async_register(

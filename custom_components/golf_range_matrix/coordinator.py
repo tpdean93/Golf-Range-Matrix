@@ -182,3 +182,8 @@ class NovaGolfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         session_id = session_id or self.data.get("session_id")
         await self.hass.async_add_executor_job(self.store.discard_last_shot, player, session_id)
         await self.async_refresh_snapshot()
+
+    async def async_reset_club_shots(self, player: str, club: str) -> None:
+        """Discard all saved shots for one player/club."""
+        await self.hass.async_add_executor_job(self.store.reset_club_shots, player, club)
+        await self.async_refresh_snapshot()

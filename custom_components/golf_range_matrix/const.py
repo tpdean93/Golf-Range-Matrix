@@ -87,3 +87,69 @@ DEFAULT_CATALOG = [
     "60 Wedge",
     "Putter",
 ]
+
+CLUB_ORDER = [
+    "Driver",
+    "Mini Driver",
+    "2 Wood",
+    "3 Wood",
+    "4 Wood",
+    "5 Wood",
+    "7 Wood",
+    "9 Wood",
+    "2 Hybrid",
+    "3 Hybrid",
+    "4 Hybrid",
+    "5 Hybrid",
+    "6 Hybrid",
+    "2 Iron",
+    "3 Iron",
+    "4 Iron",
+    "5 Iron",
+    "6 Iron",
+    "7 Iron",
+    "8 Iron",
+    "9 Iron",
+    "PW",
+    "AW",
+    "GW",
+    "SW",
+    "LW",
+    "46 Wedge",
+    "48 Wedge",
+    "50 Wedge",
+    "52 Wedge",
+    "54 Wedge",
+    "56 Wedge",
+    "58 Wedge",
+    "60 Wedge",
+    "62 Wedge",
+    "64 Wedge",
+    "Putter",
+]
+
+
+def club_sort_key(club: str) -> tuple[float, str]:
+    """Return a long-to-short sort key for a golf club name."""
+    normalized = str(club or "").strip()
+    lowered = normalized.lower()
+    order = {name.lower(): index for index, name in enumerate(CLUB_ORDER)}
+    if lowered in order:
+        return (float(order[lowered]), lowered)
+    parts = lowered.split()
+    if parts and parts[0].isdigit() and 46 <= int(parts[0]) <= 64:
+        return (23 + ((int(parts[0]) - 46) / 2), lowered)
+    return (1000.0, lowered)
+
+
+def sort_clubs(clubs: list[str]) -> list[str]:
+    """Sort clubs in distance order while preserving unique names."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for club in clubs:
+        clean = str(club or "").strip()
+        key = clean.lower()
+        if clean and key not in seen:
+            seen.add(key)
+            unique.append(clean)
+    return sorted(unique, key=club_sort_key)

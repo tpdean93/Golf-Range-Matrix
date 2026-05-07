@@ -10,6 +10,22 @@ const novaFormatValue = (value, decimals = 1) => {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(decimals) : novaEsc(value);
 };
+const novaClubOrder = ['Driver','Mini Driver','2 Wood','3 Wood','4 Wood','5 Wood','7 Wood','9 Wood','2 Hybrid','3 Hybrid','4 Hybrid','5 Hybrid','6 Hybrid','2 Iron','3 Iron','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','AW','GW','SW','LW','46 Wedge','48 Wedge','50 Wedge','52 Wedge','54 Wedge','56 Wedge','58 Wedge','60 Wedge','62 Wedge','64 Wedge','Putter'];
+const novaClubRank = (club) => {
+  const text = String((club && typeof club === 'object' ? club.club : club) || '').trim();
+  const lower = text.toLowerCase();
+  const exact = novaClubOrder.findIndex(item => item.toLowerCase() === lower);
+  if (exact >= 0) return exact;
+  const degree = Number((lower.match(/^(\d{2})\s*(?:deg|degree|wedge)?$/) || [])[1]);
+  if (Number.isFinite(degree)) return 23 + (degree - 46) / 2;
+  return 1000;
+};
+const novaSortClubs = (clubs) => [...(clubs || [])].sort((a, b) => {
+  const rank = novaClubRank(a) - novaClubRank(b);
+  const aName = String((a && typeof a === 'object' ? a.club : a) || '');
+  const bName = String((b && typeof b === 'object' ? b.club : b) || '');
+  return rank || aName.localeCompare(bName, undefined, { numeric: true, sensitivity: 'base' });
+});
 
 const novaStyles = `
   <style>
@@ -296,7 +312,7 @@ class GolfSessionControlCard extends HTMLElement {
     const club = novaValue(this._hass, clubEntity);
     const recording = novaValue(this._hass, 'switch.golf_range_matrix_range_matrix_recording') === 'on';
     const players = novaAttrs(this._hass, playerEntity).options || [player].filter(Boolean);
-    const clubs = novaAttrs(this._hass, clubEntity).options || [club].filter(Boolean);
+    const clubs = novaSortClubs(novaAttrs(this._hass, clubEntity).options || [club].filter(Boolean));
     const count = Number(workflow.bag_test_shot_count || 0);
     const target = Number(workflow.shots_per_club || novaValue(this._hass, shotsEntity) || 5);
     this.innerHTML = `<ha-card><div class="panel">
@@ -343,7 +359,7 @@ class NovaBagBuilderCard extends HTMLElement {
   playerEntity() { return this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player'; }
   clubEntity() { return this.config.club_entity || 'select.golf_range_matrix_range_matrix_active_club'; }
   player() { return novaValue(this._hass, this.playerEntity()) || 'Tyler'; }
-  savedBag() { return novaAttrs(this._hass, this.clubEntity()).options || []; }
+  savedBag() { return novaSortClubs(novaAttrs(this._hass, this.clubEntity()).options || []); }
   selected() {
     if (this._draftPlayer !== this.player() || !this._draft) {
       this._draftPlayer = this.player();
@@ -356,7 +372,7 @@ class NovaBagBuilderCard extends HTMLElement {
     [...this.catalog, ...this.savedBag(), ...this.selected()].forEach(club => {
       if (club && !clubs.some(c => c.toLowerCase() === club.toLowerCase())) clubs.push(club);
     });
-    return clubs;
+    return novaSortClubs(clubs);
   }
   selectPlayer(player) { this._hass.callService('select', 'select_option', { entity_id: this.playerEntity(), option: player }); this._draft = null; }
   selectClub(club) { this._hass.callService('select', 'select_option', { entity_id: this.clubEntity(), option: club }); }
@@ -390,7 +406,7 @@ class NovaBagBuilderCard extends HTMLElement {
     this._draft = selected;
     this.render();
   }
-  saveBag() { novaCall(this._hass, 'save_bag', { player: this.player(), clubs: this.selected().slice(0, this.maxClubs) }); }
+  saveBag() { novaCall(this._hass, 'save_bag', { player: this.player(), clubs: novaSortClubs(this.selected()).slice(0, this.maxClubs) }); }
   changeLabel(selected, saved) {
     const added = selected.filter(c => !saved.some(s => s.toLowerCase() === c.toLowerCase())).length;
     const removed = saved.filter(c => !selected.some(s => s.toLowerCase() === c.toLowerCase())).length;
@@ -454,7 +470,7 @@ class NovaWedgeMatrixCard extends HTMLElement {
   carryEntity() { return this.config.carry_entity || 'sensor.golf_range_matrix_range_matrix_carry'; }
   player() { return novaValue(this._hass, this.playerEntity()) || 'Tyler'; }
   attrs() { return novaAttrs(this._hass, this.summaryEntity()); }
-  savedBag() { return this.attrs().bag || novaAttrs(this._hass, this.clubEntity()).options || []; }
+  savedBag() { return novaSortClubs(this.attrs().bag || novaAttrs(this._hass, this.clubEntity()).options || []); }
   swingTypes() { return this.config.swings || this.defaultSwings; }
   isWedge(club) {
     const normalized = String(club || '').trim().toLowerCase();
@@ -560,7 +576,7 @@ class GolfClubResultsCard extends HTMLElement {
   render() {
     const player = novaValue(this._hass, this.config.player_entity || 'select.golf_range_matrix_range_matrix_active_player') || 'Tyler';
     const attrs = novaAttrs(this._hass, this.config.summary_entity || 'sensor.golf_range_matrix_range_matrix_player_bag_summary');
-    const clubs = attrs.clubs || [];
+    const clubs = novaSortClubs(attrs.clubs || [], club => club.club);
     const mapped = clubs.filter(club => Number(club.shot_count || 0) > 0).length;
     const totalShots = attrs.shot_count || 0;
     this.innerHTML = `<ha-card><section class="panel">
@@ -585,6 +601,13 @@ class GolfClubResultsCard extends HTMLElement {
         image_url: root.querySelector('[name="image_url"]').value,
       });
     }));
+    this.querySelectorAll('[data-reset-club]').forEach((button) => button.addEventListener('click', (ev) => {
+      const root = ev.target.closest('[data-club]');
+      const club = root?.dataset?.club;
+      if (!club) return;
+      if (!window.confirm(`Reset all saved shots for ${club}?`)) return;
+      novaCall(this._hass, 'reset_club_shots', { player, club });
+    }));
   }
   club(player, club, index) {
     const avg = club.averages || {};
@@ -605,7 +628,7 @@ class GolfClubResultsCard extends HTMLElement {
       <div class="body"><div class="photo">${image ? `<img src="${novaEsc(image)}" alt="${novaEsc(club.club)}" loading="lazy">` : `<div class="fallback"><ha-icon icon="mdi:golf-tee"></ha-icon><strong>${novaEsc(club.club)}</strong></div>`}</div><div class="numbers">${hero}</div></div>
       <div class="insight"><strong>${novaEsc(confidence)} confidence</strong><span>${novaEsc(tendency)} | ${novaEsc(dispersion)}</span><small>${novaEsc(club.ai_notes || 'Map this club to unlock averages, playable yardage, and shot tendencies.')}</small></div>
       <div class="details">${details}</div>
-      <details class="editor"><summary>Club details</summary><label>Brand<input name="brand" value="${novaEsc(meta.brand || '')}" placeholder="Titleist"></label><label>Model<input name="model" value="${novaEsc(meta.model || '')}" placeholder="Vokey SM10"></label><label>Image URL<input name="image_url" value="${novaEsc(image)}" placeholder="https://..."></label><button data-save="${index}">Save Club Details</button></details>
+      <details class="editor"><summary>Club details</summary><label>Brand<input name="brand" value="${novaEsc(meta.brand || '')}" placeholder="Titleist"></label><label>Model<input name="model" value="${novaEsc(meta.model || '')}" placeholder="Vokey SM10"></label><label>Image URL<input name="image_url" value="${novaEsc(image)}" placeholder="https://..."></label><button data-save="${index}">Save Club Details</button>${shotCount ? `<button class="resetClub" data-reset-club="${index}">Reset ${novaEsc(club.club)} Shots</button>` : ''}</details>
     </article>`;
   }
 }
