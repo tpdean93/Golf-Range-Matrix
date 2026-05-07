@@ -309,6 +309,8 @@ class NovaGolfStore:
         metrics = dict(latest) if latest else {}
         bag_summary = self.build_bag_summary(active_player)
         bag_summary["metadata"] = metadata.get(active_player, {})
+        bag_summary["bag"] = bags.get(active_player, [])
+        bag_summary["wedge_matrix"] = matrices.get(active_player, {})
         return {
             "players": players,
             "bags": bags,
