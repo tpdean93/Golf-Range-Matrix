@@ -19,17 +19,17 @@ This project is meant to stay separate from your HOA app repo. Home Assistant re
 
 Package these files as Lovelace module resources:
 
-- `custom-cards/nova-shot-tracer-card.js`
+- `custom-cards/nova-shot-tracer-card.js` (legacy standalone card; bundled installs use `range-shot-tracer-card`)
 - `custom-cards/golf-metric-panel-card.js`
 - `custom-cards/golf-shot-history-card.js`
 - `custom-cards/golf-session-control-card.js`
-- `custom-cards/nova-bag-builder-card.js`
-- `custom-cards/nova-wedge-matrix-card.js`
+- `custom-cards/nova-bag-builder-card.js` (legacy standalone card; bundled installs use `range-bag-builder-card`)
+- `custom-cards/nova-wedge-matrix-card.js` (legacy standalone card; bundled installs use `range-wedge-matrix-card`)
 - `custom-cards/golf-club-results-card.js`
 
 Optional global CSS resource:
 
-- `styles/nova-lovelace-background.css`
+- `styles/golf-range-matrix-background.css`
 
 ## Required Helpers
 
@@ -78,7 +78,7 @@ Optional session/logger helpers:
 Use:
 
 ```yaml
-type: custom:nova-bag-builder-card
+type: custom:range-bag-builder-card
 player_entity: input_select.golf_active_player
 club_entity: input_select.golf_active_club
 profiles_entity: input_text.golf_profiles_json
@@ -121,7 +121,7 @@ The card enforces the 14-club max in the UI, supports custom club names, and wri
 Use:
 
 ```yaml
-type: custom:nova-wedge-matrix-card
+type: custom:range-wedge-matrix-card
 player_entity: input_select.golf_active_player
 club_entity: input_select.golf_active_club
 carry_entity: sensor.golf_carry

@@ -1,27 +1,28 @@
 # Dashboard Package
 
-The repo includes the custom dashboard pieces built for the NOVA launch monitor dashboard.
+The repo includes the custom dashboard pieces built for the Golf Range Matrix launch monitor dashboard.
 
 ## Cards
 
-- `nova-shot-tracer-card`: animated 300-yard driving-range shot tracer with carry, total, offline, grade, shot shape, and ball flight animation.
-- `golf-metric-panel-card`: reusable glass metric panel for scoring numbers, flight window, club delivery, and spin/result blocks.
-- `golf-shot-history-card`: last-50-shot charts with immediate live buffering plus recorder history.
-- `golf-session-control-card`: practice/session controls, dynamic player profiles, single-club mapping, and bag-test flow.
-- `nova-bag-builder-card`: dynamic per-player bag builder with custom clubs and 14-club max.
-- `nova-wedge-matrix-card`: short-game wedge matrix for swing type and wedge yardages, including 5-shot carry capture.
-- `golf-club-results-card`: mapped bag results wall with one card per saved club, manual brand/model/image metadata, and live logger summaries.
+- `range-shot-tracer-card`: animated 300-yard driving-range shot tracer with carry, total, offline, grade, shot shape, and ball flight animation.
+- `range-metric-panel-card`: reusable glass metric panel for scoring numbers, flight window, club delivery, and spin/result blocks.
+- `range-shot-history-card`: last-50-shot charts with immediate live buffering plus recorder history.
+- `range-session-control-card`: practice/session controls, dynamic player profiles, single-club mapping, and bag-test flow.
+- `range-bag-builder-card`: dynamic per-player bag builder with custom clubs and 14-club max.
+- `range-wedge-matrix-card`: short-game wedge matrix for swing type and wedge yardages, including 5-shot carry capture.
+- `range-club-results-card`: mapped bag results wall with one card per saved club, manual brand/model/image metadata, and live logger summaries.
+- `range-swing-video-card`: compact Swing Analyzer toggle and looping annotated swing playback.
 
 ## Suggested Views
 
 - `Range Matrix`: main launch monitor view with shot tracer on the left and metric panels/history on the right.
-- `Numbers`: raw OpenGolfCoach/NOVA metric tiles for debugging.
+- `Numbers`: raw Open Golf Coach metric tiles for debugging.
 - `Practice`: session controls, bag builder, wedge matrix, and MQTT contract.
 - `Results`: per-player club cards showing mapped averages, playable yardages, tendencies, confidence, and editable club details.
 
 ## Entity Naming Assumptions
 
-The included examples assume OpenGolfCoach/NOVA metrics arrive as:
+The included examples assume Open Golf Coach metrics arrive as:
 
 - `sensor.golf_carry`
 - `sensor.golf_total`

@@ -8,7 +8,7 @@ This repo contains:
 
 - `custom_components/golf_range_matrix/`: the HACS custom integration with SQLite storage, native entities, services, bundled cards, dashboard templates, and optional InfluxDB export.
 - `custom-cards/`: Lovelace cards for shot tracing, metric panels, history, session controls, bag building, and wedge matrix.
-- `scripts/nova_shot_logger.py`: local MQTT-to-SQLite shot logger for per-player/per-club shot history.
+- `scripts/nova_shot_logger.py`: legacy local MQTT-to-SQLite shot logger for per-player/per-club shot history.
 - `tools/swing-analyzer/`: local Swing Analyzer service for MQTT-driven OBS replay capture, MediaPipe pose analysis, annotated MP4 output, and Home Assistant MQTT discovery.
 - `docs/hacs-integration.md`: install, migration, backup, and release notes for the integration.
 - `docs/mqtt-contract.md`: MQTT topics and payloads for the HA dashboard and lab PC bridge.
@@ -57,6 +57,8 @@ python scripts\nova_shot_logger.py --host homeassistant.local
 ```
 
 Set `MQTT_USERNAME` and `MQTT_PASSWORD` in `.env` if your broker requires authentication.
+
+The standalone logger keeps its original filename and `NOVA_*` environment variables for compatibility. The HACS integration is the recommended Golf Range Matrix path for new installs.
 
 ## Data Flow
 

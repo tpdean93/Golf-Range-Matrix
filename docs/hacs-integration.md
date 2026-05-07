@@ -1,6 +1,6 @@
 # Golf Range Matrix HACS Integration
 
-`Golf Range Matrix` is the release-ready Home Assistant product boundary for the launch monitor dashboard. It replaces helper-based prototype storage with integration-owned SQLite, native HA entities, native services, bundled frontend cards, and dashboard templates.
+`Golf Range Matrix` is the Home Assistant product boundary for the launch monitor dashboard. It replaces helper-based prototype storage with integration-owned SQLite, native HA entities, native services, bundled frontend cards, and dashboard templates.
 
 ## Install Through HACS
 
@@ -31,14 +31,14 @@ Do not use mutable `input_text` helpers as canonical storage for profiles, bags,
 
 The integration exposes:
 
-- `sensor.range_matrix_carry`, `sensor.range_matrix_total`, `sensor.range_matrix_ball_speed`, `sensor.range_matrix_club_speed`, and other live metrics.
-- `sensor.range_matrix_latest_shot` with the full latest shot as attributes.
-- `sensor.range_matrix_player_bag_summary` with the active player's club summaries as attributes.
-- `sensor.range_matrix_workflow` for session mode and progress attributes.
-- `select.range_matrix_active_player` and `select.range_matrix_active_club`.
-- `switch.range_matrix_recording`.
-- `button.range_matrix_map_club`, `button.range_matrix_bag_test`, `button.range_matrix_discard_last_shot`, and `button.range_matrix_stop_session`.
-- `number.range_matrix_shots_per_club`.
+- `sensor.golf_range_matrix_range_matrix_carry`, `sensor.golf_range_matrix_range_matrix_total`, `sensor.golf_range_matrix_range_matrix_ball_speed`, `sensor.golf_range_matrix_range_matrix_club_speed`, and other live metrics.
+- `sensor.golf_range_matrix_range_matrix_latest_shot` with the full latest shot as attributes.
+- `sensor.golf_range_matrix_range_matrix_player_bag_summary` with the active player's club summaries as attributes.
+- `sensor.golf_range_matrix_range_matrix_workflow` for session mode and progress attributes.
+- `select.golf_range_matrix_range_matrix_active_player` and `select.golf_range_matrix_range_matrix_active_club`.
+- `switch.golf_range_matrix_range_matrix_recording`.
+- `button.golf_range_matrix_range_matrix_map_club`, `button.golf_range_matrix_range_matrix_bag_test`, `button.golf_range_matrix_range_matrix_discard_last_shot`, and `button.golf_range_matrix_range_matrix_stop_session`.
+- `number.golf_range_matrix_range_matrix_shots_per_club`.
 
 Entity IDs can still be adjusted by Home Assistant if there are naming conflicts, but these are the intended defaults.
 
@@ -76,11 +76,11 @@ Add that as a Lovelace module resource. It registers:
 - `custom:range-shot-history-card`
 - `custom:range-session-control-card`
 - `custom:range-bag-builder-card`
-- `custom:range-bag-builder-card`
 - `custom:range-wedge-matrix-card`
 - `custom:range-club-results-card`
+- `custom:range-swing-video-card`
 
-The service-backed cards call `golf_range_matrix.*` services and read native Range Matrix entities. They do not write to `input_text`.
+The service-backed cards call `golf_range_matrix.*` services and read native Golf Range Matrix entities. They do not write to `input_text`.
 
 ## Dashboard Template
 
@@ -100,13 +100,13 @@ The launch monitor bridge should publish raw shot JSON to the configured topic, 
 golf/shot/raw
 ```
 
-Golf Range Matrix stores shots only while `switch.range_matrix_recording` is on unless `Store shots while recording is off` is enabled in options.
+Golf Range Matrix stores shots only while `switch.golf_range_matrix_range_matrix_recording` is on unless `Store shots while recording is off` is enabled in options.
 
 ## Optional InfluxDB Export
 
 InfluxDB is optional. Enable it in integration options and provide URL, token, organization, and bucket.
 
-SQLite remains canonical storage. InfluxDB receives shot telemetry as an analytics sink for Grafana or long-term time-series dashboards. Disabling InfluxDB does not affect core Range Matrix data.
+SQLite remains canonical storage. InfluxDB receives shot telemetry as an analytics sink for Grafana or long-term time-series dashboards. Disabling InfluxDB does not affect core Golf Range Matrix data.
 
 ## Backups
 

@@ -54,7 +54,7 @@ That means a shot can be logged successfully through MQTT while the dashboard vi
 Install Python 3.11 or 3.12 (MediaPipe doesn't support 3.13 yet).
 
 ```powershell
-cd C:\nova-bag-builder-shot-logger\tools\swing-analyzer
+cd C:\golf-range-matrix\tools\swing-analyzer
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -136,7 +136,7 @@ If the dashboard browser is not on the sim PC, allow inbound TCP `8765` through 
 ### 6. Run the analyzer
 
 ```powershell
-cd C:\nova-bag-builder-shot-logger\tools\swing-analyzer
+cd C:\golf-range-matrix\tools\swing-analyzer
 .\.venv\Scripts\Activate.ps1
 python run.py
 ```
