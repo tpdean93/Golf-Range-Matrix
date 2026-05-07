@@ -82,7 +82,7 @@ def _async_setup_source_entity_bridge(hass: HomeAssistant, coordinator: NovaGolf
         await coordinator.async_handle_shot(payload)
 
     def state_changed(event: Event) -> None:
-        hass.async_create_task(ingest_from_entities(event))
+        hass.add_job(ingest_from_entities, event)
 
     return async_track_state_change_event(hass, [trigger_entity], state_changed)
 
