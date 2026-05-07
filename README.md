@@ -19,7 +19,7 @@ This repo contains:
 
 The recommended product path is now `Golf Range Matrix` as a Home Assistant custom integration:
 
-[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tpdean93&repository=nova-bag-builder-shot-logger&category=integration)
+[![Open your Home Assistant instance and open this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tpdean93&repository=Golf-Range-Matrix&category=integration)
 
 1. Add this repo to HACS as a custom integration repository.
 2. Install `Golf Range Matrix`.
