@@ -1,5 +1,7 @@
 # Golf Range Matrix
 
+![Golf Range Matrix logo](assets/golf-range-matrix-logo.png)
+
 HACS-installable Home Assistant integration and companion tools for bag mapping, wedge matrix, and virtual driving-range workflows.
 
 This repo contains:

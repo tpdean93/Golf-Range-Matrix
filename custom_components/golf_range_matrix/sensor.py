@@ -38,15 +38,17 @@ class NovaMetricSensor(NovaGolfEntity, SensorEntity):
     def __init__(self, coordinator: NovaGolfCoordinator, key: str, info: dict[str, Any]) -> None:
         super().__init__(coordinator, key, str(info["name"]), str(info.get("icon") or "mdi:golf"))
         self.key = key
+        self.decimals = int(info.get("decimals", 1))
         unit = str(info.get("unit") or "")
         if unit:
             self._attr_native_unit_of_measurement = unit
+        self._attr_suggested_display_precision = self.decimals
 
     @property
     def native_value(self) -> float | None:
         """Return the latest metric value."""
         value = (self.coordinator.data.get("metrics") or {}).get(self.key)
-        return value if isinstance(value, (int, float)) else None
+        return round(float(value), self.decimals) if isinstance(value, (int, float)) else None
 
 
 class NovaTextSensor(NovaGolfEntity, SensorEntity):
