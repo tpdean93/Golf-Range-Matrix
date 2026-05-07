@@ -5,15 +5,17 @@
 #   - Mosquitto MQTT broker running on HA (default add-on).
 #   - This analyzer is running on the sim PC and connected to that broker.
 #   - The analyzer auto-publishes MQTT discovery, so HA already has:
-#       switch.swing_analyzer
-#       sensor.last_swing_club
-#       sensor.last_swing_player
-#       sensor.last_swing_body_summary
-#       sensor.last_swing_faults
-#       sensor.last_swing_summary
-#       sensor.last_swing_annotated_url
-#       sensor.last_swing_raw_url
-#       sensor.last_swing_timestamp
+#       switch.golf_swing_analyzer_swing_analyzer
+#       sensor.golf_swing_analyzer_last_swing_club
+#       sensor.golf_swing_analyzer_last_swing_player
+#       sensor.golf_swing_analyzer_last_swing_body_summary
+#       sensor.golf_swing_analyzer_last_swing_faults
+#       sensor.golf_swing_analyzer_last_swing_summary
+#       sensor.golf_swing_analyzer_last_swing_annotated_url
+#       sensor.golf_swing_analyzer_last_swing_raw_url
+#       sensor.golf_swing_analyzer_last_swing_timestamp
+#   - /golf_range_matrix/golf-range-matrix-cards.js is registered as a
+#     Lovelace module resource for custom:range-swing-video-card.
 # =====================================================================
 
 title: Swing Analyzer
@@ -24,48 +26,31 @@ cards:
   - type: horizontal-stack
     cards:
       - type: entity
-        entity: switch.swing_analyzer
+        entity: switch.golf_swing_analyzer_swing_analyzer
         name: Swing Analyzer
         icon: mdi:video-vintage
         state_color: true
         tap_action:
           action: toggle
       - type: entity
-        entity: sensor.last_swing_club
+        entity: sensor.golf_swing_analyzer_last_swing_club
         name: Last Club
         icon: mdi:golf
       - type: entity
-        entity: sensor.last_swing_player
+        entity: sensor.golf_swing_analyzer_last_swing_player
         name: Player
         icon: mdi:account
       - type: entity
-        entity: sensor.last_swing_timestamp
+        entity: sensor.golf_swing_analyzer_last_swing_timestamp
         name: When
         icon: mdi:clock-outline
 
   # ---- Annotated video ------------------------------------------------------
-  - type: vertical-stack
-    cards:
-      - type: markdown
-        content: |
-          ### Last swing
-          Plays automatically when a new swing is analyzed.
-      - type: custom:html-template-card
-        ignore_line_breaks: true
-        content: |
-          {% set url = states('sensor.last_swing_annotated_url') %}
-          {% set ts  = states('sensor.last_swing_timestamp') %}
-          {% if url not in ['unknown','unavailable',''] %}
-            <video src="{{ url }}?t={{ ts }}"
-                   autoplay muted controls playsinline
-                   style="width:100%; aspect-ratio:16/9; background:#000;">
-              Your browser does not support HTML5 video.
-            </video>
-          {% else %}
-            <div style="padding:1rem; color:#999; text-align:center;">
-              No swing analyzed yet.
-            </div>
-          {% endif %}
+  - type: custom:range-swing-video-card
+    title: Last Swing
+    grid_options:
+      columns: full
+      rows: 10
 
   # ---- Body summary + faults + AI coach -------------------------------------
   - type: grid
@@ -75,14 +60,14 @@ cards:
       - type: entities
         title: Body summary
         entities:
-          - entity: sensor.last_swing_body_summary
+          - entity: sensor.golf_swing_analyzer_last_swing_body_summary
             name: Pose
-          - entity: sensor.last_swing_faults
+          - entity: sensor.golf_swing_analyzer_last_swing_faults
             name: Detected faults
       - type: markdown
         title: Coaching note
         content: >
-          {{ states('sensor.last_swing_summary') }}
+          {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}
 
   # ---- Trigger card ---------------------------------------------------------
   - type: markdown

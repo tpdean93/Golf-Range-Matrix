@@ -4,10 +4,6 @@
     {
       "url": "/golf_range_matrix/golf-range-matrix-cards.js",
       "type": "module"
-    },
-    {
-      "url": "/hacsfiles/html-template-card/html-template-card.js",
-      "type": "module"
     }
   ],
   "views": [
@@ -30,6 +26,14 @@
             },
             {
               "type": "custom:range-shot-history-card"
+            },
+            {
+              "type": "custom:range-swing-video-card",
+              "title": "Last Swing",
+              "grid_options": {
+                "columns": "full",
+                "rows": 10
+              }
             }
           ]
         }
@@ -64,7 +68,7 @@
                 },
                 {
                   "type": "entity",
-                  "entity": "switch.swing_analyzer",
+                  "entity": "switch.golf_swing_analyzer_swing_analyzer",
                   "name": "Swing Analyzer",
                   "icon": "mdi:video-vintage",
                   "state_color": true,
@@ -125,32 +129,26 @@
           "type": "grid",
           "cards": [
             {
-              "type": "vertical-stack",
-              "cards": [
-                {
-                  "type": "markdown",
-                  "content": "### Last swing\nPlays automatically when a new swing is analyzed."
-                },
-                {
-                  "type": "custom:html-template-card",
-                  "ignore_line_breaks": true,
-                  "content": "{% set url = states('sensor.last_swing_annotated_url') %}\n{% set ts  = states('sensor.last_swing_timestamp') %}\n{% if url not in ['unknown','unavailable',''] %}\n  <video src=\"{{ url }}?t={{ ts }}\"\n         autoplay muted controls playsinline\n         style=\"width:100%; aspect-ratio:16/9; background:#000;\">\n    Your browser does not support HTML5 video.\n  </video>\n{% else %}\n  <div style=\"padding:1rem; color:#999; text-align:center;\">\n    No swing analyzed yet.\n  </div>\n{% endif %}"
-                }
-              ]
+              "type": "custom:range-swing-video-card",
+              "title": "Last Swing",
+              "grid_options": {
+                "columns": "full",
+                "rows": 10
+              }
             },
             {
               "type": "entities",
               "title": "Latest Swing",
               "entities": [
-                "switch.swing_analyzer",
-                "sensor.last_swing_player",
-                "sensor.last_swing_club",
-                "sensor.last_swing_body_summary",
-                "sensor.last_swing_faults",
-                "sensor.last_swing_summary",
-                "sensor.last_swing_annotated_url",
-                "sensor.last_swing_raw_url",
-                "sensor.last_swing_timestamp"
+                "switch.golf_swing_analyzer_swing_analyzer",
+                "sensor.golf_swing_analyzer_last_swing_player",
+                "sensor.golf_swing_analyzer_last_swing_club",
+                "sensor.golf_swing_analyzer_last_swing_body_summary",
+                "sensor.golf_swing_analyzer_last_swing_faults",
+                "sensor.golf_swing_analyzer_last_swing_summary",
+                "sensor.golf_swing_analyzer_last_swing_annotated_url",
+                "sensor.golf_swing_analyzer_last_swing_raw_url",
+                "sensor.golf_swing_analyzer_last_swing_timestamp"
               ]
             }
           ]

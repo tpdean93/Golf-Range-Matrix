@@ -195,7 +195,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             "create",
             {
                 "title": "Golf Range Matrix dashboard template",
-                "message": "The bundled dashboard template is available at `/golf_range_matrix/dashboards/golf-range-matrix-dashboard.json`. Add `/golf_range_matrix/golf-range-matrix-cards.js` and `/hacsfiles/html-template-card/html-template-card.js` as Lovelace module resources.",
+                "message": "The bundled dashboard template is available at `/golf_range_matrix/dashboards/golf-range-matrix-dashboard.json`. Add `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource.",
                 "notification_id": "golf_range_matrix_dashboard_template",
             },
             blocking=False,

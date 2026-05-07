@@ -31,7 +31,9 @@ The integration stores app data in `golf_range_matrix.sqlite3` under the Home As
 
 The optional local Swing Analyzer service lives in `tools/swing-analyzer/`. It subscribes to the same `golf/shot/raw` MQTT events as Range Matrix, saves OBS replay-buffer clips, runs MediaPipe pose analysis, serves annotated slow-motion MP4s, and publishes Home Assistant MQTT discovery for the `Golf Swing Analyzer` device.
 
-See `tools/swing-analyzer/README.md` for install steps, OBS replay-buffer setup, the `mqtt_swing` user, paho-mqtt installation into OBS, and dashboard wiring. OBS Replay Buffer must be started in OBS before `SaveReplayBuffer` can produce source MP4s. Annotated videos default to 0.5x speed via `annotation.slow_motion_factor` in the analyzer config.
+Range Matrix publishes retained selected-player/selected-club context to `golf/context/current`, so the analyzer labels swings with the dashboard-selected club instead of any stale club value coming from the OBS shot payload. The bundled card resource also includes `custom:range-swing-video-card`, a compact looping video card with an on/off control for the analyzer MQTT switch.
+
+See `tools/swing-analyzer/README.md` for install steps, OBS replay-buffer setup, the `mqtt_swing` user, paho-mqtt installation into OBS, firewall notes for the analyzer HTTP server, LLM coaching options, and camera/FPS guidance. OBS Replay Buffer must be started in OBS before `SaveReplayBuffer` can produce source MP4s. Annotated videos default to 0.5x speed via `annotation.slow_motion_factor` in the analyzer config.
 
 ## Run The Logger
 

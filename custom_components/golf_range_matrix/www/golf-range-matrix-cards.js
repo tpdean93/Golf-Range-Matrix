@@ -637,6 +637,61 @@ class GolfClubResultsCard extends HTMLElement {
   }
 }
 
+class RangeSwingVideoCard extends HTMLElement {
+  setConfig(config) {
+    this.config = {
+      switch_entity: 'switch.golf_swing_analyzer_swing_analyzer',
+      url_entity: 'sensor.golf_swing_analyzer_last_swing_annotated_url',
+      timestamp_entity: 'sensor.golf_swing_analyzer_last_swing_timestamp',
+      club_entity: 'sensor.golf_swing_analyzer_last_swing_club',
+      title: 'Last Swing',
+      ...config,
+    };
+  }
+  set hass(hass) {
+    this._hass = hass;
+    const ids = [this.config.switch_entity, this.config.url_entity, this.config.timestamp_entity, this.config.club_entity];
+    const signature = ids.map((id) => `${id}:${hass.states?.[id]?.state || ''}:${hass.states?.[id]?.last_changed || ''}`).join('|');
+    if (signature === this._signature) return;
+    this._signature = signature;
+    this.render();
+  }
+  src(rawUrl, rawTs) {
+    if (!rawUrl || ['unknown', 'unavailable'].includes(rawUrl)) return '';
+    const encoded = encodeURI(rawUrl);
+    const separator = encoded.includes('?') ? '&' : '?';
+    return `${encoded}${separator}t=${encodeURIComponent(rawTs || Date.now())}`;
+  }
+  toggle() {
+    this._hass.callService('switch', 'toggle', { entity_id: this.config.switch_entity });
+  }
+  render() {
+    if (!this._hass) return;
+    const sw = novaState(this._hass, this.config.switch_entity);
+    const urlState = novaState(this._hass, this.config.url_entity);
+    const tsState = novaState(this._hass, this.config.timestamp_entity);
+    const clubState = novaState(this._hass, this.config.club_entity);
+    const on = sw?.state === 'on';
+    const src = this.src(urlState?.state || '', tsState?.state || urlState?.last_changed || '');
+    const when = tsState?.state && !['unknown', 'unavailable'].includes(tsState.state) ? tsState.state.replace('T', ' ') : '';
+    const club = clubState?.state && !['unknown', 'unavailable'].includes(clubState.state) ? clubState.state : '';
+    const meta = [club, when].filter(Boolean).join(' - ');
+    this.innerHTML = `<ha-card><div class="swing-card">
+      <div class="top"><div><div class="kicker">Swing Analyzer</div><h2>${novaEsc(this.config.title)}</h2><div class="meta">${novaEsc(meta)}</div></div><button class="toggle ${on ? 'on' : ''}"><ha-icon icon="mdi:video-vintage"></ha-icon><span>${on ? 'On' : 'Off'}</span></button></div>
+      ${src ? `<video class="video" muted controls playsinline preload="auto" autoplay loop src="${novaEsc(src)}"></video>` : `<div class="empty">No swing analyzed yet.</div>`}
+    </div></ha-card><style>
+      ha-card{border:0;border-radius:28px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}
+      .swing-card{padding:18px;position:relative;isolation:isolate}.swing-card:before{content:'';position:absolute;inset:-35% auto auto 42%;width:360px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 65%);z-index:-1}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h2{margin:2px 0 0;font-size:25px;font-weight:950;letter-spacing:-.04em}.meta{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:800}.toggle{height:38px;min-width:82px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);font-weight:950;cursor:pointer}.toggle ha-icon{--mdc-icon-size:19px;color:#8ffcff}.toggle.on{background:rgba(114,255,125,.14);border-color:rgba(114,255,125,.42);color:#d8ffdc}.toggle.on ha-icon{color:#72ff7d}.video{width:100%;aspect-ratio:16/9;min-height:320px;background:#000;border-radius:20px;display:block;object-fit:contain}.empty{display:grid;place-items:center;min-height:280px;border-radius:20px;background:rgba(0,0,0,.28);color:rgba(255,255,255,.62);font-weight:800;text-align:center;padding:14px}@media(max-width:900px){.video{min-height:220px}.empty{min-height:220px}}
+    </style>`;
+    this.querySelector('.toggle')?.addEventListener('click', () => this.toggle());
+    const video = this.querySelector('video');
+    if (video) {
+      video.addEventListener('canplay', () => video.play().catch(() => {}));
+      video.addEventListener('loadeddata', () => video.play().catch(() => {}));
+    }
+  }
+}
+
 novaDefine('range-shot-tracer-card', NovaShotTracerCard);
 novaDefine('range-metric-panel-card', GolfMetricPanelCard);
 novaDefine('range-shot-history-card', GolfShotHistoryCard);
@@ -644,3 +699,4 @@ novaDefine('range-session-control-card', GolfSessionControlCard);
 novaDefine('range-bag-builder-card', NovaBagBuilderCard);
 novaDefine('range-wedge-matrix-card', NovaWedgeMatrixCard);
 novaDefine('range-club-results-card', GolfClubResultsCard);
+novaDefine('range-swing-video-card', RangeSwingVideoCard);
