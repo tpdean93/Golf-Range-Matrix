@@ -16,26 +16,98 @@ const novaStyles = `
 
 class NovaShotTracerCard extends HTMLElement {
   setConfig(config) { this.config = config || {}; }
-  set hass(hass) { this._hass = hass; this.render(); }
-  metric(key) {
-    const entity = novaConfiguredEntity(this.config, key, `sensor.golf_range_matrix_range_matrix_${key}`);
-    return Number(novaValue(this._hass, entity) || 0);
+  set hass(hass) {
+    this._hass = hass;
+    const watched = ['ball_speed','carry','total','offline','launch_angle','launch_direction','total_spin','spin_axis','shot_shape','shot_grade','latest_shot']
+      .map(key => this.entity(key));
+    watched.push(this.config.connection_entity || 'binary_sensor.nova_connection');
+    const signature = watched.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}`).join('|');
+    if (this._signature === signature && this._rendered) return;
+    this._signature = signature;
+    this.render();
+  }
+  entity(key) {
+    const fallback = key === 'latest_shot'
+      ? 'sensor.golf_range_matrix_range_matrix_latest_shot'
+      : `sensor.golf_range_matrix_range_matrix_${key}`;
+    return novaConfiguredEntity(this.config, key, fallback);
+  }
+  state(entity) { return novaState(this._hass, entity); }
+  value(entity) {
+    const state = this.state(entity);
+    if (!state || state.state === 'unknown' || state.state === 'unavailable') return null;
+    const number = Number(state.state);
+    return Number.isFinite(number) ? number : state.state;
+  }
+  unit(entity) {
+    const unit = this.state(entity)?.attributes?.unit_of_measurement || '';
+    return unit === 'yds' ? 'yd' : unit;
+  }
+  clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+  fmt(entity, decimals = 1) {
+    const value = this.value(entity);
+    if (value === null) return '--';
+    return typeof value === 'number' ? `${value.toFixed(decimals)}${this.unit(entity) ? ` ${this.unit(entity)}` : ''}` : novaEsc(value);
+  }
+  metric(label, value, tone = '') { return `<div class="metric ${tone}"><div class="label">${label}</div><div class="value">${value}</div></div>`; }
+  ago(entity) {
+    const shot = this.state(entity);
+    const raw = shot?.attributes?.received_at || shot?.last_changed || shot?.last_updated;
+    if (!raw) return '--';
+    const then = new Date(raw);
+    if (Number.isNaN(then.getTime())) return novaEsc(raw);
+    const minutes = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
+    return minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} hr ago`;
   }
   render() {
-    const carry = this.metric('carry');
-    const offline = this.metric('offline');
-    const total = this.metric('total');
-    const x = Math.max(20, Math.min(280, 150 + offline * 2));
-    const y = Math.max(28, 265 - carry * .8);
-    this.innerHTML = `${novaStyles}<div class="nova-card">
-      <p class="nova-title">Live Shot Tracer</p><h2 class="nova-hero">${carry ? carry.toFixed(1) : '--'} yd carry</h2>
-      <svg viewBox="0 0 300 300" style="width:100%;height:360px;margin-top:10px;border-radius:24px;background:linear-gradient(#10233d,#14351f)">
-        ${[75,150,225].map((v,i)=>`<line x1="0" y1="${v}" x2="300" y2="${v}" stroke="rgba(255,255,255,.18)"/><text x="12" y="${v-6}" fill="rgba(255,255,255,.55)" font-size="10">${(3-i)*75} yd</text>`).join('')}
-        <path d="M150 285 C150 210 ${x} 170 ${x} ${y}" fill="none" stroke="#55f7ff" stroke-width="5" stroke-linecap="round" filter="drop-shadow(0 0 10px #55f7ff)"/>
-        <circle cx="${x}" cy="${y}" r="7" fill="#fff"/>
-      </svg>
-      <div class="nova-grid"><div class="nova-tile"><div class="nova-label">Total</div><div class="nova-value">${total ? total.toFixed(1) : '--'} yd</div></div><div class="nova-tile"><div class="nova-label">Offline</div><div class="nova-value">${offline ? offline.toFixed(1) : '0.0'} yd</div></div></div>
-    </div>`;
+    if (!this._hass || !this.config) return;
+    this._rendered = true;
+    const speedEntity = this.entity('ball_speed');
+    const carryEntity = this.entity('carry');
+    const totalEntity = this.entity('total');
+    const offlineEntity = this.entity('offline');
+    const launchEntity = this.entity('launch_angle');
+    const directionEntity = this.entity('launch_direction');
+    const spinEntity = this.entity('total_spin');
+    const axisEntity = this.entity('spin_axis');
+    const shapeEntity = this.entity('shot_shape');
+    const gradeEntity = this.entity('shot_grade');
+    const latestEntity = this.entity('latest_shot');
+    const speed = Number(this.value(speedEntity) || 0);
+    const carry = Number(this.value(carryEntity) || 0);
+    const launch = Number(this.value(launchEntity) || 0);
+    const side = Number(this.value(directionEntity) || 0);
+    const axis = Number(this.value(axisEntity) || 0);
+    const offline = Number(this.value(offlineEntity) || 0);
+    const shotName = this.value(shapeEntity) || '';
+    const shotRank = this.value(gradeEntity) || '';
+    const connected = this.state(this.config.connection_entity || 'binary_sensor.nova_connection')?.state === 'on';
+    const startX = 195, startY = 222;
+    const distanceLift = carry ? this.clamp((carry - 110) * 0.18, -12, 34) : 0;
+    const direction = side + axis * 0.22 + offline * 0.08;
+    const endX = this.clamp(startX + direction * 9.4, 24, 366);
+    const apexX = this.clamp(startX + direction * 4.8, 40, 350);
+    const apexY = this.clamp(176 - launch * 3.25 - speed * 0.29 - distanceLift, 24, 150);
+    const landY = this.clamp(156 - speed * 0.08 - distanceLift * 0.45, 100, 166);
+    const curve = `M ${startX} ${startY} C ${startX} ${startY - 64}, ${apexX} ${apexY}, ${endX} ${landY}`;
+    const shadow = `M ${startX} ${startY + 5} C ${startX} ${startY - 24}, ${apexX} ${apexY + 38}, ${this.clamp(endX * .86 + startX * .14, 48, 342)} ${this.clamp(landY + 36, 152, 204)}`;
+    const directionText = offline < -1 ? 'Left' : offline > 1 ? 'Right' : side < -0.75 ? 'Started Left' : side > 0.75 ? 'Started Right' : 'Center Cut';
+    const offlineLabel = Math.abs(offline) >= 1 ? `${directionText} ${Math.abs(offline).toFixed(1)} yd` : 'Center Cut';
+    const resultRest = [shotName, offlineLabel].filter(Boolean).join(' | ');
+    this.innerHTML = `<ha-card><div class="shell">
+      <div class="wash"></div>
+      <div class="topline"><div><div class="eyebrow">LIVE OPEN GOLF COACH</div><h1>${novaEsc(this.config.title || 'Range Matrix Shot Lab')}</h1></div><div class="status ${connected ? 'on' : 'off'}"><span></span>${connected ? 'Connected' : 'Offline'}</div></div>
+      <div class="heroStrip"><div class="primaryStat carryStat"><div class="statLabel">Carry</div><div class="statValue">${this.fmt(carryEntity, 1)}</div></div><div class="primaryStat"><div class="statLabel">Ball Speed</div><div class="statValue small">${this.fmt(speedEntity, 1)}</div></div><div class="resultWrap">${shotRank ? `<div class="gradeBig">${novaEsc(shotRank)}</div>` : ''}<div class="resultText">${novaEsc(resultRest)}</div></div></div>
+      <div class="stage"><svg viewBox="0 0 390 252" preserveAspectRatio="none" aria-label="Animated shot tracer driving range grid"><defs><linearGradient id="range-tracer" x1="0" x2="1" y1="1" y2="0"><stop offset="0" stop-color="#f7ff5c"/><stop offset="0.44" stop-color="#38f8ff"/><stop offset="1" stop-color="#b36bff"/></linearGradient><radialGradient id="impact-glow"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#38f8ff" stop-opacity="0"/></radialGradient><filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <path class="fairway" d="M52 242 L195 24 L338 242 Z"/><path class="target" d="M195 24 V236"/><path class="roughBoundary" d="M104 236 L195 24 M286 236 L195 24"/><path class="grid" d="M22 214 H368 M34 178 H356 M48 142 H342 M66 106 H324 M88 70 H302 M112 36 H278 M52 242 L195 24 L338 242"/>
+        <g class="rangeLabels"><text x="30" y="210">50 YD</text><text x="42" y="174">100 YD</text><text x="56" y="138">150 YD</text><text x="76" y="102">200 YD</text><text x="98" y="66">250 YD</text><text x="122" y="31">300 YD</text><text x="315" y="210">50</text><text x="306" y="174">100</text><text x="292" y="138">150</text><text x="266" y="102">200</text><text x="242" y="66">250</text><text x="218" y="31">300</text></g>
+        <g class="sideLabels"><text x="70" y="247">LEFT ROUGH</text><text x="246" y="247">RIGHT ROUGH</text></g>
+        <path class="ghost" d="${shadow}"/><path id="flightPath" class="pathTemplate" d="${curve}"/><path class="curve halo" d="${curve}"/><path class="curve animated" d="${curve}"/><circle class="impactGlow" cx="${startX}" cy="${startY}" r="30"/><circle class="tee" cx="${startX}" cy="${startY}" r="5"/><circle class="movingBall" r="5"><animateMotion dur="3s" repeatCount="indefinite" rotate="auto" calcMode="spline" keyTimes="0;0.8;1" keyPoints="0;1;1" keySplines=".2 0 .2 1;0 0 1 1"><mpath href="#flightPath"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.8;1" dur="3s" repeatCount="indefinite"/></circle><circle class="landPulse" cx="${endX}" cy="${landY}" r="5"/><text class="impactLabel" x="151" y="248">IMPACT</text><text class="flightLabel" x="${this.clamp(endX - 54, 18, 292)}" y="${this.clamp(landY - 12, 24, 168)}">${novaEsc(offlineLabel)}</text>
+      </svg></div>
+      <div class="metrics">${this.metric('Total', this.fmt(totalEntity, 1), 'cyan')}${this.metric('Offline', this.fmt(offlineEntity, 1), 'violet')}${this.metric('Spin', this.fmt(spinEntity, 0), 'lime')}${this.metric('Launch', this.fmt(launchEntity, 1), 'amber')}${this.metric('Club', novaEsc(novaAttrs(this._hass, latestEntity).club || '--'), 'blue')}${this.metric('Last Shot', this.ago(latestEntity), 'pink')}</div>
+    </div></ha-card><style>
+      ha-card{overflow:hidden;border:0;border-radius:28px;background:#050814;color:white;box-shadow:0 24px 70px rgba(0,0,0,.42)}.shell{position:relative;min-height:840px;padding:26px;isolation:isolate}.wash{position:absolute;inset:0;background:radial-gradient(circle at 70% 15%,rgba(56,248,255,.25),transparent 34%),radial-gradient(circle at 12% 88%,rgba(168,85,247,.28),transparent 42%),linear-gradient(135deg,rgba(4,7,19,.98),rgba(7,15,36,.86));z-index:-2}.topline{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}.eyebrow{color:#8ffcff;font-weight:900;letter-spacing:.2em;font-size:13px;text-shadow:0 0 14px rgba(56,248,255,.45)}h1{margin:7px 0 0;font-size:clamp(36px,6vw,64px);line-height:.92;letter-spacing:-.06em}.status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;background:rgba(255,255,255,.11);font-weight:800;white-space:nowrap}.status span{width:10px;height:10px;border-radius:50%;background:#ff4d6d;box-shadow:0 0 18px #ff4d6d}.status.on span{background:#72ff7d;box-shadow:0 0 18px #72ff7d}.heroStrip{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.72fr) minmax(240px,1fr);align-items:center;gap:14px;margin-top:24px;padding:16px 18px;border:1px solid rgba(255,255,255,.14);border-radius:22px;background:rgba(255,255,255,.08);backdrop-filter:blur(16px)}.statLabel{color:rgba(255,255,255,.68);text-transform:uppercase;letter-spacing:.17em;font-size:12px;font-weight:900}.statValue{margin-top:3px;font-size:clamp(44px,7vw,72px);line-height:.95;font-weight:950;letter-spacing:-.07em;text-shadow:0 0 28px rgba(56,248,255,.35)}.statValue.small{font-size:clamp(30px,4.5vw,50px)}.carryStat .statValue{color:#f7ff8a}.resultWrap{display:flex;align-items:center;justify-content:flex-end;gap:10px}.gradeBig{font-size:38px;line-height:1;font-weight:950;color:#f7ff8a;text-shadow:0 0 20px rgba(247,255,92,.35)}.resultText{padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.1);border:1px solid rgba(247,255,92,.32);color:#f7ff8a;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.stage{position:relative;margin-top:16px;min-height:490px;border:1px solid rgba(255,255,255,.15);border-radius:25px;background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03));overflow:hidden}svg{position:absolute;inset:0;width:100%;height:100%}.fairway{fill:rgba(56,248,255,.045);stroke:rgba(255,255,255,.08);stroke-width:1}.grid{stroke:rgba(255,255,255,.17);stroke-width:1;fill:none}.target{stroke:rgba(247,255,92,.45);stroke-width:1.8;fill:none;stroke-dasharray:5 8}.roughBoundary{stroke:rgba(255,255,255,.18);stroke-width:1.25;fill:none;stroke-dasharray:4 8}.ghost{stroke:rgba(255,255,255,.16);stroke-width:5;fill:none;stroke-linecap:round;stroke-dasharray:2 13}.pathTemplate{fill:none;stroke:none}.curve{stroke:url(#range-tracer);stroke-width:7;fill:none;stroke-linecap:round;filter:url(#glow)}.curve.halo{stroke:rgba(56,248,255,.25);stroke-width:18;opacity:.45}.curve.animated{stroke-dasharray:520;stroke-dashoffset:520;animation:draw-flight 3s ease-out infinite}.movingBall{fill:white;filter:url(#glow)}.landPulse{fill:white;filter:url(#glow);opacity:0;animation:land-pulse 3s ease-out infinite}.tee{fill:white;filter:url(#glow)}.impactGlow{fill:url(#impact-glow);opacity:.76;animation:impact-pulse 3s ease-out infinite}text{fill:rgba(255,255,255,.64);font-size:12px;text-transform:uppercase;letter-spacing:.16em}.rangeLabels text{fill:rgba(247,255,92,.86);font-size:10.5px;font-weight:950;letter-spacing:.12em;text-shadow:0 0 10px rgba(247,255,92,.35)}.sideLabels text{fill:rgba(255,255,255,.42);font-size:8.5px;font-weight:950;letter-spacing:.15em}.flightLabel,.impactLabel{font-size:13px;font-weight:950;fill:rgba(255,255,255,.78);text-shadow:0 0 12px rgba(255,255,255,.28)}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}.metric{padding:16px;border-radius:20px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(16px)}.metric .label{color:rgba(255,255,255,.66);text-transform:uppercase;font-size:11px;letter-spacing:.14em;font-weight:900}.metric .value{margin-top:8px;font-size:25px;font-weight:900;letter-spacing:-.03em}.cyan{box-shadow:inset 0 0 0 1px rgba(56,248,255,.12)}.violet{box-shadow:inset 0 0 0 1px rgba(168,85,247,.16)}.lime{box-shadow:inset 0 0 0 1px rgba(230,255,88,.14)}.amber{box-shadow:inset 0 0 0 1px rgba(255,184,77,.14)}.blue{box-shadow:inset 0 0 0 1px rgba(80,140,255,.16)}.pink{box-shadow:inset 0 0 0 1px rgba(255,77,190,.16)}@keyframes draw-flight{0%{stroke-dashoffset:520;opacity:0}7%{opacity:1}78%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:0;opacity:.25}}@keyframes impact-pulse{0%,100%{opacity:.28;transform:scale(.88)}7%,18%{opacity:.82;transform:scale(1)}}@keyframes land-pulse{0%,76%{opacity:0;r:4}83%{opacity:1;r:7}100%{opacity:0;r:13}}@media(max-width:760px){.shell{min-height:980px;padding:18px}.topline{flex-direction:column}.heroStrip{grid-template-columns:1fr;align-items:flex-start}.resultWrap{justify-content:flex-start}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.stage{min-height:430px}}
+    </style>`;
   }
 }
 
@@ -58,13 +130,145 @@ class GolfMetricPanelCard extends HTMLElement {
 }
 
 class GolfShotHistoryCard extends HTMLElement {
-  setConfig(config) { this.config = config || {}; }
-  set hass(hass) { this._hass = hass; this.render(); }
+  setConfig(config) {
+    this.config = config || {};
+    this.limit = this.config.limit || 50;
+    this.entities = this.config.entities || [
+      'sensor.golf_range_matrix_range_matrix_carry',
+      'sensor.golf_range_matrix_range_matrix_total',
+      'sensor.golf_range_matrix_range_matrix_offline',
+      'sensor.golf_range_matrix_range_matrix_ball_speed',
+    ];
+    this.basis = this.config.basis_entity || this.entities[0];
+    this._liveShots = [];
+  }
+  set hass(hass) {
+    this._hass = hass;
+    const signature = this.entities.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}`).join('|');
+    if (signature !== this._liveSignature) {
+      this._liveSignature = signature;
+      this.addLiveShot();
+      this._lastFetch = 0;
+    }
+    if (!this._lastFetch || Date.now() - this._lastFetch > 45000) this.fetchData();
+    this.render();
+  }
+  num(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+  label(entity) {
+    return entity.split('.').pop().replace('golf_range_matrix_range_matrix_', '').replaceAll('_', ' ');
+  }
+  currentShot() {
+    if (!this._hass) return null;
+    const shot = { idx: 0, t: Date.now() };
+    let hasValue = false;
+    for (const entity of this.entities) {
+      const value = this.num(this._hass.states?.[entity]?.state);
+      shot[entity] = value;
+      if (value !== null) hasValue = true;
+    }
+    return hasValue ? shot : null;
+  }
+  addLiveShot() {
+    const shot = this.currentShot();
+    if (!shot || shot[this.basis] === null) return;
+    const last = this._liveShots[this._liveShots.length - 1];
+    if (last && Math.abs((last[this.basis] ?? 0) - shot[this.basis]) < 0.05 && Math.abs((last[this.entities[3]] ?? 0) - (shot[this.entities[3]] ?? 0)) < 0.05) return;
+    this._liveShots.push(shot);
+    this._liveShots = this._liveShots.slice(-this.limit);
+  }
+  mergeShots(historyShots) {
+    const combined = [...(historyShots || [])];
+    for (const live of this._liveShots || []) {
+      const duplicate = combined.some(shot => Math.abs((shot[this.basis] ?? 99999) - (live[this.basis] ?? -99999)) < 0.05 && Math.abs((shot[this.entities[3]] ?? 99999) - (live[this.entities[3]] ?? -99999)) < 0.05);
+      if (!duplicate) combined.push(live);
+    }
+    return combined.slice(-this.limit).map((shot, idx) => ({ ...shot, idx: idx + 1 }));
+  }
+  async fetchData() {
+    if (!this._hass || this._fetching) return;
+    this._fetching = true;
+    this._lastFetch = Date.now();
+    try {
+      const start = new Date(Date.now() - (this.config.hours_back || 168) * 3600000).toISOString();
+      const rows = await this._hass.callApi('GET', `history/period/${start}?filter_entity_id=${encodeURIComponent(this.entities.join(','))}&minimal_response`);
+      const byEntity = {};
+      for (const list of rows || []) {
+        for (const item of list || []) {
+          byEntity[item.entity_id] = byEntity[item.entity_id] || [];
+          const value = this.num(item.state);
+          if (value !== null) byEntity[item.entity_id].push({ t: new Date(item.last_changed || item.last_updated).getTime(), v: value });
+        }
+      }
+      const basisRows = byEntity[this.basis] || [];
+      const historyShots = basisRows.slice(-this.limit).map((point, idx) => {
+        const shot = { idx: idx + 1, t: point.t };
+        for (const entity of this.entities) {
+          const series = byEntity[entity] || [];
+          let match = null;
+          for (const item of series) {
+            if (item.t <= point.t + 10000) match = item;
+            else break;
+          }
+          shot[entity] = match?.v ?? null;
+        }
+        return shot;
+      });
+      this._historyShots = historyShots;
+      this._shots = this.mergeShots(historyShots);
+      this._error = '';
+    } catch (err) {
+      this._error = err?.message || String(err);
+      this._shots = this.mergeShots(this._historyShots || []);
+    } finally {
+      this._fetching = false;
+      this.render();
+    }
+  }
+  points(values, x0, y0, width, height) {
+    const nums = values.filter(value => value !== null);
+    if (!nums.length) return { path: '', dots: '' };
+    let min = Math.min(...nums), max = Math.max(...nums);
+    if (min === max) { min -= 1; max += 1; }
+    const coords = values.map((value, index) => value === null ? null : {
+      x: x0 + (values.length <= 1 ? width : index * width / (values.length - 1)),
+      y: y0 + height - ((value - min) / (max - min)) * height,
+    });
+    const path = coords.filter(Boolean).map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+    const dots = coords.filter(Boolean).map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3"/>`).join('');
+    return { path, dots };
+  }
+  chart(title, series) {
+    const shots = this._shots || this.mergeShots(this._historyShots || []);
+    const w = 360, h = 172, x0 = 30, y0 = 28, cw = 302, ch = 92;
+    const grid = [0, 1, 2, 3].map(i => `<line x1="${x0}" y1="${y0 + i * ch / 3}" x2="${x0 + cw}" y2="${y0 + i * ch / 3}"/>`).join('');
+    const paths = series.map(item => {
+      const data = this.points(shots.map(shot => shot[item.entity]), x0, y0, cw, ch);
+      return `<g class="series" style="--c:${item.color}"><path class="line" d="${data.path}"/>${data.dots}</g>`;
+    }).join('');
+    const latest = series.map(item => {
+      const vals = shots.map(shot => shot[item.entity]).filter(value => value !== null);
+      const last = vals[vals.length - 1];
+      return `<span style="--c:${item.color}"><b></b>${novaEsc(item.name)} ${last == null ? '--' : last.toFixed(item.decimals ?? 1)}</span>`;
+    }).join('');
+    return `<div class="chart"><div class="chartHead"><div>${novaEsc(title)}</div><small>Last ${shots.length || 0} shots</small></div><svg viewBox="0 0 ${w} ${h}"><g class="grid">${grid}</g>${paths}</svg><div class="legend">${latest}</div></div>`;
+  }
   render() {
-    const attrs = novaAttrs(this._hass, this.config.entity || this.config.latest_shot_entity || 'sensor.golf_range_matrix_range_matrix_latest_shot');
-    this.innerHTML = `${novaStyles}<div class="nova-card"><p class="nova-title">Latest Shot</p><div class="nova-grid">
-      ${['player','club','carry','total','offline','ball_speed','launch_angle','shot_rank'].map((key) => `<div class="nova-tile"><div class="nova-label">${novaEsc(key.replaceAll('_',' '))}</div><div class="nova-value">${novaEsc(attrs[key] ?? '--')}</div></div>`).join('')}
-    </div></div>`;
+    const title = this.config.title || 'Last 50 Shots';
+    const distance = [
+      { entity: this.entities[0], name: 'Carry', color: '#f7ff5c' },
+      { entity: this.entities[1], name: 'Total', color: '#38f8ff' },
+    ].filter(item => item.entity);
+    const flight = [
+      { entity: this.entities[2], name: 'Offline', color: '#ff5d7a' },
+      { entity: this.entities[3], name: 'Speed', color: '#72ff7d' },
+    ].filter(item => item.entity);
+    this.innerHTML = `<ha-card><div class="panel"><div class="head"><div><div class="kicker">Shot History</div><div class="title">${novaEsc(title)}</div></div><button>${this._fetching ? 'Loading' : 'Refresh'}</button></div>${this._error ? `<div class="error">${novaEsc(this._error)}</div>` : ''}<div class="charts">${this.chart('Distance', distance)}${this.chart('Direction + Speed', flight)}</div></div></ha-card><style>
+      ha-card{border:0;border-radius:24px;background:linear-gradient(145deg,rgba(20,26,44,.92),rgba(8,12,24,.84));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-40% auto auto 35%;width:360px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:20px;font-weight:900;letter-spacing:-.04em}button{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);border-radius:999px;padding:7px 10px;font-weight:800;text-transform:uppercase;font-size:10px}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.chart{border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.055);padding:12px}.chartHead{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:14px;font-weight:850;text-transform:capitalize}.chartHead small{color:rgba(255,255,255,.48);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}svg{width:100%;height:160px}.grid line{stroke:rgba(255,255,255,.1);stroke-width:1}.line{fill:none;stroke:var(--c);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.series circle{fill:var(--c);filter:drop-shadow(0 0 8px var(--c))}.legend{display:flex;gap:10px;flex-wrap:wrap;color:rgba(255,255,255,.7);font-size:12px;font-weight:800;text-transform:capitalize}.legend span{display:flex;align-items:center;gap:5px}.legend b{display:block;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c)}.error{color:#ff9aad;margin-bottom:10px}@media(max-width:760px){.charts{grid-template-columns:1fr}}
+    </style>`;
+    this.querySelector('button')?.addEventListener('click', () => { this._lastFetch = 0; this.fetchData(); });
   }
 }
 
@@ -151,6 +355,22 @@ class NovaBagBuilderCard extends HTMLElement {
   }
   selectPlayer(player) { this._hass.callService('select', 'select_option', { entity_id: this.playerEntity(), option: player }); this._draft = null; }
   selectClub(club) { this._hass.callService('select', 'select_option', { entity_id: this.clubEntity(), option: club }); }
+  players() { return novaAttrs(this._hass, this.playerEntity()).options || [this.player()].filter(Boolean); }
+  saveProfiles(players) { return novaCall(this._hass, 'save_profile', { players: players.map(p => String(p).trim()).filter(Boolean) }); }
+  addProfile(name) {
+    const clean = String(name || '').trim().replace(/\s+/g, ' ');
+    if (!clean) return;
+    const players = this.players();
+    if (players.some(player => player.toLowerCase() === clean.toLowerCase())) return;
+    this.saveProfiles([...players, clean]);
+  }
+  removeProfile(name) {
+    const players = this.players();
+    if (players.length <= 1) return;
+    const next = players.filter(player => player !== name);
+    this.saveProfiles(next);
+    if (this.player() === name && next[0]) this.selectPlayer(next[0]);
+  }
   addClub(club) {
     const clean = String(club || '').trim().replace(/\s+/g, ' ');
     if (!clean || this.selected().some(c => c.toLowerCase() === clean.toLowerCase()) || this.selected().length >= this.maxClubs) return;
@@ -173,7 +393,7 @@ class NovaBagBuilderCard extends HTMLElement {
   }
   render() {
     const player = this.player();
-    const players = novaAttrs(this._hass, this.playerEntity()).options || [player];
+    const players = this.players();
     const selected = this.selected();
     const saved = this.savedBag();
     const active = novaValue(this._hass, this.clubEntity());
@@ -181,7 +401,8 @@ class NovaBagBuilderCard extends HTMLElement {
     this.innerHTML = `<ha-card><div class="panel">
       <div class="head"><div><div class="kicker">Player Bag</div><div class="title">Bag Builder</div></div><button class="save ${dirty ? 'dirty' : ''}">${dirty ? 'Save Changes' : 'Saved'}</button></div>
       <div class="note">Click clubs below to add or remove them from this player bag. Add a custom club if it is not in the list. Maximum ${this.maxClubs} clubs.</div>
-      <div class="players">${players.map(p => `<button class="pill ${p === player ? 'on' : ''}" data-player="${novaEsc(p)}">${novaEsc(p)}</button>`).join('')}</div>
+      <div class="players">${players.map(p => `<span class="profileChip"><button class="pill ${p === player ? 'on' : ''}" data-player="${novaEsc(p)}">${novaEsc(p)}</button><button class="removeProfile" data-remove-profile="${novaEsc(p)}" ${players.length <= 1 ? 'disabled' : ''} title="Remove ${novaEsc(p)}">x</button></span>`).join('')}</div>
+      <div class="profileTools"><input placeholder="Add player profile"><button class="addProfile">Add Profile</button></div>
       <div class="summary"><div><span>Player</span><b>${novaEsc(player)}</b></div><div><span>Saved Clubs</span><b>${saved.length}/${this.maxClubs}</b></div><div><span>Status</span><b>${dirty ? this.changeLabel(selected, saved) : 'Saved'}</b></div><div><span>Active</span><b>${novaEsc(active || '--')}</b></div></div>
       <div class="stripLabel">Saved bag. Click one to make it active.</div>
       <div class="bagStrip">${saved.map((club, idx) => `<button class="bagClub ${active === club ? 'active' : ''}" data-active-club="${novaEsc(club)}"><b>${idx + 1}</b>${novaEsc(club)}</button>`).join('') || '<div class="empty">Save clubs below to build this player bag.</div>'}</div>
@@ -194,12 +415,16 @@ class NovaBagBuilderCard extends HTMLElement {
         return `<button class="club ${inDraft ? 'inBag' : ''} ${inSaved ? 'savedClub' : ''} ${active === club ? 'active' : ''} ${disabled ? 'disabled' : ''}" data-club="${novaEsc(club)}" ${disabled ? 'disabled' : ''}><span>${novaEsc(club)}</span><small>${label}</small></button>`;
       }).join('')}</div>
     </div></ha-card><style>
-      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-35% -20% auto auto;width:300px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.22),transparent 64%);z-index:-1}.head{display:flex;justify-content:space-between;gap:12px;align-items:center}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.note{margin-top:12px;color:rgba(255,255,255,.7);font-size:13px;font-weight:750;line-height:1.35}.save,.pill,.club,.bagClub,.addCustom{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:850}.save{padding:9px 12px;color:#b8ffbf}.save.dirty{color:#f7ff8a;border-color:rgba(247,255,92,.4);background:rgba(247,255,92,.12)}.players{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.pill{padding:9px 12px}.pill.on{background:rgba(247,255,92,.16);border-color:rgba(247,255,92,.45);color:#f7ff8a}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.summary div{padding:12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.summary span,.stripLabel{display:block;color:rgba(255,255,255,.55);font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900}.summary b{display:block;margin-top:5px;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stripLabel{margin:4px 0 8px}.bagStrip{display:flex;gap:8px;overflow:auto;padding:4px 0 12px}.bagClub{padding:8px 10px;white-space:nowrap;color:rgba(255,255,255,.78)}.bagClub b{color:#8ffcff;margin-right:6px}.bagClub.active{background:rgba(56,248,255,.16);border-color:rgba(56,248,255,.45);color:#8ffcff}.customClub{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0 0 12px}.customClub input{min-width:0;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.22);color:white;padding:12px;font-weight:800;outline:none}.addCustom{border-radius:16px;padding:0 13px;color:#8ffcff}.addCustom:disabled,.customClub input:disabled{opacity:.45}.clubGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.club{border-radius:16px;padding:12px;text-align:left;min-height:62px}.club span{display:block;font-size:15px;font-weight:900}.club small{display:block;margin-top:5px;color:rgba(255,255,255,.48);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.club.inBag{background:rgba(255,255,255,.115);border-color:rgba(255,255,255,.18)}.club.savedClub small{color:#b8ffbf}.club.active{box-shadow:inset 0 0 0 1px rgba(247,255,92,.48);color:#f7ff8a}.club.disabled{opacity:.42}.empty{color:rgba(255,255,255,.55);font-weight:800;padding:9px 0}@media(max-width:760px){.clubGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-35% -20% auto auto;width:300px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.22),transparent 64%);z-index:-1}.head{display:flex;justify-content:space-between;gap:12px;align-items:center}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.note{margin-top:12px;color:rgba(255,255,255,.7);font-size:13px;font-weight:750;line-height:1.35}.save,.pill,.club,.bagClub,.addCustom,.addProfile,.removeProfile{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:850}.save{padding:9px 12px;color:#b8ffbf}.save.dirty{color:#f7ff8a;border-color:rgba(247,255,92,.4);background:rgba(247,255,92,.12)}.players{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 10px}.profileChip{display:flex;align-items:center;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);overflow:hidden}.profileChip .pill{border:0;border-radius:0;background:transparent;padding:9px 10px}.profileChip .pill.on{background:rgba(247,255,92,.16);color:#f7ff8a}.removeProfile{border:0;border-left:1px solid rgba(255,255,255,.10);border-radius:0;padding:9px 10px;color:#ff9aad;background:rgba(255,93,122,.08);text-transform:uppercase}.removeProfile:disabled{opacity:.35}.profileTools{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0 0 14px}.profileTools input,.customClub input{min-width:0;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(0,0,0,.22);color:white;padding:12px;font-weight:800;outline:none}.addProfile,.addCustom{border-radius:16px;padding:0 13px;color:#8ffcff}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.summary div{padding:12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.summary span,.stripLabel{display:block;color:rgba(255,255,255,.55);font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900}.summary b{display:block;margin-top:5px;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stripLabel{margin:4px 0 8px}.bagStrip{display:flex;gap:8px;overflow:auto;padding:4px 0 12px}.bagClub{padding:8px 10px;white-space:nowrap;color:rgba(255,255,255,.78)}.bagClub b{color:#8ffcff;margin-right:6px}.bagClub.active{background:rgba(56,248,255,.16);border-color:rgba(56,248,255,.45);color:#8ffcff}.customClub{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0 0 12px}.addCustom:disabled,.customClub input:disabled{opacity:.45}.clubGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.club{border-radius:16px;padding:12px;text-align:left;min-height:62px}.club span{display:block;font-size:15px;font-weight:900}.club small{display:block;margin-top:5px;color:rgba(255,255,255,.48);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.club.inBag{background:rgba(255,255,255,.115);border-color:rgba(255,255,255,.18)}.club.savedClub small{color:#b8ffbf}.club.active{box-shadow:inset 0 0 0 1px rgba(247,255,92,.48);color:#f7ff8a}.club.disabled{opacity:.42}.empty{color:rgba(255,255,255,.55);font-weight:800;padding:9px 0}@media(max-width:760px){.clubGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.profileTools{grid-template-columns:1fr}}
     </style>`;
     this.querySelectorAll('[data-player]').forEach(b => b.addEventListener('click', () => this.selectPlayer(b.dataset.player)));
+    this.querySelectorAll('[data-remove-profile]').forEach(b => b.addEventListener('click', () => this.removeProfile(b.dataset.removeProfile)));
     this.querySelectorAll('[data-club]').forEach(b => b.addEventListener('click', () => this.toggleClub(b.dataset.club)));
     this.querySelectorAll('[data-active-club]').forEach(b => b.addEventListener('click', () => this.selectClub(b.dataset.activeClub)));
     this.querySelector('.save')?.addEventListener('click', () => this.saveBag());
+    const profileInput = this.querySelector('.profileTools input');
+    this.querySelector('.addProfile')?.addEventListener('click', () => this.addProfile(profileInput?.value));
+    profileInput?.addEventListener('keydown', ev => { if (ev.key === 'Enter') this.addProfile(profileInput.value); });
     const input = this.querySelector('.customClub input');
     this.querySelector('.addCustom')?.addEventListener('click', () => this.addClub(input?.value));
     input?.addEventListener('keydown', ev => { if (ev.key === 'Enter') this.addClub(input.value); });

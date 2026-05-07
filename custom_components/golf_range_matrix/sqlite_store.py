@@ -341,6 +341,15 @@ class NovaGolfStore:
                     "insert into players(name, created_at, updated_at) values(?, ?, ?)",
                     (name, now, now),
                 )
+            if cleaned:
+                placeholders = ",".join("?" for _ in cleaned)
+                db.execute(f"delete from player_bags where player not in ({placeholders})", cleaned)
+                db.execute(f"delete from wedge_matrices where player not in ({placeholders})", cleaned)
+                db.execute(f"delete from club_metadata where player not in ({placeholders})", cleaned)
+            else:
+                db.execute("delete from player_bags")
+                db.execute("delete from wedge_matrices")
+                db.execute("delete from club_metadata")
             active = self.state_value("active_player", cleaned[0] if cleaned else "Tyler")
             if active not in cleaned and cleaned:
                 self._set_state_db(db, "active_player", cleaned[0])
