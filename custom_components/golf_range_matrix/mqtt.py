@@ -28,7 +28,7 @@ async def async_setup_mqtt(hass: HomeAssistant, entry: ConfigEntry, coordinator:
         if not isinstance(payload, dict):
             LOGGER.warning("Ignoring Range Matrix shot payload that is not an object on %s", message.topic)
             return
-        hass.async_create_task(coordinator.async_handle_shot(payload))
+        hass.add_job(coordinator.async_handle_shot, payload)
 
     LOGGER.info("Subscribing Golf Range Matrix to MQTT topic %s", topic)
     return await mqtt.async_subscribe(hass, topic, message_received, qos=1)

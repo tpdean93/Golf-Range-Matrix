@@ -10,6 +10,26 @@ DEFAULT_CONTEXT_TOPIC = "golf/context/current"
 DEFAULT_STORE_UNRECORDED = False
 DEFAULT_SHOTS_PER_CLUB = 5
 
+DEFAULT_SOURCE_ENTITIES = {
+    "carry": "sensor.golf_carry",
+    "total": "sensor.golf_total",
+    "offline": "sensor.golf_offline",
+    "ball_speed": "sensor.golf_ball_speed",
+    "club_speed": "sensor.golf_clubhead_speed",
+    "smash_factor": "sensor.golf_smash_factor",
+    "launch_angle": "sensor.golf_launch_angle",
+    "launch_direction": "sensor.golf_launch_direction",
+    "total_spin": "sensor.golf_total_spin",
+    "spin_axis": "sensor.golf_spin_axis",
+    "backspin": "sensor.golf_backspin",
+    "sidespin": "sensor.golf_sidespin",
+    "peak_height": "sensor.golf_peak_height",
+    "hang_time": "sensor.golf_hang_time",
+    "descent_angle": "sensor.golf_descent_angle",
+    "shot_name": "sensor.golf_shot_name",
+    "shot_rank": "sensor.golf_shot_rank",
+}
+
 CONF_SHOT_TOPIC = "shot_topic"
 CONF_CONTEXT_TOPIC = "context_topic"
 CONF_STORE_UNRECORDED = "store_unrecorded"

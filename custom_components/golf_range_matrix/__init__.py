@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.core import Event, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import DOMAIN, PLATFORMS, STORE_FILENAME
+from .const import DEFAULT_SOURCE_ENTITIES, DOMAIN, PLATFORMS, STORE_FILENAME
 from .coordinator import NovaGolfCoordinator
 from .frontend import async_register_frontend
 from .influx import InfluxExporter
@@ -47,11 +49,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_frontend(hass)
     unsubscribe = await async_setup_mqtt(hass, entry, coordinator)
     entry.async_on_unload(unsubscribe)
+    entry.async_on_unload(_async_setup_source_entity_bridge(hass, coordinator))
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_services(hass)
     return True
+
+
+def _async_setup_source_entity_bridge(hass: HomeAssistant, coordinator: NovaGolfCoordinator):
+    """Mirror the existing NOVA/OpenGolfCoach HA sensors into Range Matrix storage."""
+    trigger_entity = DEFAULT_SOURCE_ENTITIES["carry"]
+
+    async def ingest_from_entities(event: Event) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in {"unknown", "unavailable", ""}:
+            return
+
+        # The OpenGolfCoach bridge updates several metric entities nearly together.
+        # Waiting briefly lets the companion values settle before we build one shot row.
+        await asyncio.sleep(0.75)
+
+        payload: dict[str, Any] = {
+            "id": f"ha-source-{new_state.last_updated.isoformat()}",
+            "timestamp": new_state.last_updated.isoformat(),
+        }
+        for field, entity_id in DEFAULT_SOURCE_ENTITIES.items():
+            state = hass.states.get(entity_id)
+            if state is not None and state.state not in {"unknown", "unavailable", ""}:
+                payload[field] = state.state
+
+        await coordinator.async_handle_shot(payload)
+
+    def state_changed(event: Event) -> None:
+        hass.async_create_task(ingest_from_entities(event))
+
+    return async_track_state_change_event(hass, [trigger_entity], state_changed)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
