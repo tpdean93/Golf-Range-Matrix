@@ -26,7 +26,7 @@ cards:
       - type: entity
         entity: switch.swing_analyzer
         name: Swing Analyzer
-        icon: mdi:record-rec
+        icon: mdi:video-vintage
         state_color: true
         tap_action:
           action: toggle
@@ -49,9 +49,7 @@ cards:
       - type: markdown
         content: |
           ### Last swing
-          Annotated body-pose video for the most recent swing. Stored locally
-          on the sim PC; the analyzer keeps the most recent **5 swings** and
-          rolls older ones off automatically.
+          Plays automatically when a new swing is analyzed.
       - type: custom:html-template-card
         ignore_line_breaks: true
         content: |
