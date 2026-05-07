@@ -10,11 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import (
-    CONF_STORE_UNRECORDED,
-    DEFAULT_SHOTS_PER_CLUB,
-    DOMAIN,
-)
+from .const import DEFAULT_SHOTS_PER_CLUB, DOMAIN
 from .sqlite_store import NovaGolfStore
 
 LOGGER = logging.getLogger(__name__)
@@ -56,17 +52,13 @@ class NovaGolfCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def async_handle_shot(self, payload: dict[str, Any]) -> None:
-        """Persist a raw shot payload when recording rules allow it."""
+        """Persist a raw shot payload and keep live dashboard state current."""
         context = self.context()
-        store_unrecorded = bool(self.entry.options.get(CONF_STORE_UNRECORDED, self.entry.data.get(CONF_STORE_UNRECORDED, False)))
-        if not context["recording"] and not store_unrecorded:
-            LOGGER.debug("Ignoring shot while recording is off")
-            return
-
         row = await self.hass.async_add_executor_job(self.store.record_shot, payload, context)
         if self.influx is not None:
             await self.influx.async_export_shot(row)
-        await self._advance_mapping_if_needed(row)
+        if context["recording"]:
+            await self._advance_mapping_if_needed(row)
         await self.async_refresh_snapshot()
 
     async def _advance_mapping_if_needed(self, row: dict[str, Any]) -> None:

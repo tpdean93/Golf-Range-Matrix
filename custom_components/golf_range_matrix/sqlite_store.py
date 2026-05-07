@@ -474,7 +474,7 @@ class NovaGolfStore:
                 """
                 select count(*) as shot_count
                 from shots
-                where discarded = 0 and session_id = ? and player = ? and club = ?
+                where discarded = 0 and recording = 1 and session_id = ? and player = ? and club = ?
                 """,
                 (session_id, player, club),
             ).fetchone()
@@ -487,7 +487,7 @@ class NovaGolfStore:
                 """
                 select *
                 from shots
-                where discarded = 0 and player = ? and club = ?
+                where discarded = 0 and recording = 1 and player = ? and club = ?
                 order by received_at
                 """,
                 (player, club),
@@ -500,7 +500,7 @@ class NovaGolfStore:
                 """
                 select club, min(received_at) as first_seen
                 from shots
-                where discarded = 0 and player = ? and club is not null and club != ''
+                where discarded = 0 and recording = 1 and player = ? and club is not null and club != ''
                 group by club
                 order by first_seen
                 """,
