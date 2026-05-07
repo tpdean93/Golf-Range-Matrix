@@ -1,0 +1,10 @@
+opencv-python>=4.9.0
+mediapipe>=0.10.14
+numpy>=1.26.0
+watchdog>=4.0.0
+pyyaml>=6.0.1
+flask>=3.0.0
+requests>=2.31.0
+paho-mqtt>=2.1.0
+obsws-python>=1.7.0
+imageio-ffmpeg>=0.4.9

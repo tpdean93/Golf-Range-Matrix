@@ -1,0 +1,95 @@
+# =====================================================================
+# Add this view to your Golf Range Matrix Lovelace dashboard.
+#
+# Prereqs:
+#   - Mosquitto MQTT broker running on HA (default add-on).
+#   - This analyzer is running on the sim PC and connected to that broker.
+#   - The analyzer auto-publishes MQTT discovery, so HA already has:
+#       switch.swing_analyzer
+#       sensor.last_swing_club
+#       sensor.last_swing_player
+#       sensor.last_swing_body_summary
+#       sensor.last_swing_faults
+#       sensor.last_swing_summary
+#       sensor.last_swing_annotated_url
+#       sensor.last_swing_raw_url
+#       sensor.last_swing_timestamp
+# =====================================================================
+
+title: Swing Analyzer
+path: swing-analyzer
+icon: mdi:golf-tee
+cards:
+  # ---- Header / control row -------------------------------------------------
+  - type: horizontal-stack
+    cards:
+      - type: entity
+        entity: switch.swing_analyzer
+        name: Swing Analyzer
+        icon: mdi:record-rec
+        state_color: true
+        tap_action:
+          action: toggle
+      - type: entity
+        entity: sensor.last_swing_club
+        name: Last Club
+        icon: mdi:golf
+      - type: entity
+        entity: sensor.last_swing_player
+        name: Player
+        icon: mdi:account
+      - type: entity
+        entity: sensor.last_swing_timestamp
+        name: When
+        icon: mdi:clock-outline
+
+  # ---- Annotated video ------------------------------------------------------
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          ### Last swing
+          Annotated body-pose video for the most recent swing. Stored locally
+          on the sim PC; the analyzer keeps the most recent **5 swings** and
+          rolls older ones off automatically.
+      - type: custom:html-template-card
+        ignore_line_breaks: true
+        content: |
+          {% set url = states('sensor.last_swing_annotated_url') %}
+          {% set ts  = states('sensor.last_swing_timestamp') %}
+          {% if url not in ['unknown','unavailable',''] %}
+            <video src="{{ url }}?t={{ ts }}"
+                   autoplay muted controls playsinline
+                   style="width:100%; aspect-ratio:16/9; background:#000;">
+              Your browser does not support HTML5 video.
+            </video>
+          {% else %}
+            <div style="padding:1rem; color:#999; text-align:center;">
+              No swing analyzed yet.
+            </div>
+          {% endif %}
+
+  # ---- Body summary + faults + AI coach -------------------------------------
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: entities
+        title: Body summary
+        entities:
+          - entity: sensor.last_swing_body_summary
+            name: Pose
+          - entity: sensor.last_swing_faults
+            name: Detected faults
+      - type: markdown
+        title: Coaching note
+        content: >
+          {{ states('sensor.last_swing_summary') }}
+
+  # ---- Trigger card ---------------------------------------------------------
+  - type: markdown
+    content: >
+      **How to use:** Flip the **Swing Analyzer** switch above to ON before
+      you swing. The next shot detected by Nova will save a replay clip in OBS,
+      run pose analysis, and update this view. Flip it OFF when you're done so
+      practice shots don't fill up your disk.

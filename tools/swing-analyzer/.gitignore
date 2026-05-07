@@ -1,0 +1,23 @@
+# Local environment
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# MediaPipe model is auto-downloaded on first run; don't commit (~10 MB)
+models/
+
+# Local config overrides - never commit credentials
+config.local.yaml
+
+# Local swing data (videos, analyses, shot json)
+shot_data/
+raw/
+annotated/
+analysis/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,1 @@
+"""Golf swing analyzer package."""

@@ -1,0 +1,55 @@
+# Golf Swing Analyzer config - example.
+# Copy this to config.yaml and fill in the values for your setup.
+
+paths:
+  raw_video_dir: "C:/golf_swings/raw"
+  annotated_video_dir: "C:/golf_swings/annotated"
+  shot_data_dir: "C:/golf_swings/shot_data"
+  analysis_dir: "C:/golf_swings/analysis"
+
+matching:
+  max_time_difference_seconds: 15
+  wait_for_video_seconds: 25
+
+retention:
+  keep_recent_swings: 5
+
+camera:
+  angle: "down_the_line"
+  fps_sample_rate: 2
+
+annotation:
+  slow_motion_factor: 0.5
+
+server:
+  host: "0.0.0.0"
+  port: 8765
+  public_base_url: "http://CHANGE-ME:8765"
+
+obs:
+  enabled: true
+  host: "127.0.0.1"
+  port: 4455
+  password: "CHANGE-ME"
+  save_replay_on_shot: true
+
+mqtt:
+  enabled: true
+  host: "CHANGE-ME"
+  port: 1883
+  username: "mqtt_swing"
+  password: "CHANGE-ME"
+  client_id: "golf_swing_analyzer"
+  shot_topic: "golf/shot/raw"
+  context_topic: "golf/context/current"
+  enable_topic: "golf/swing/analyzer/enabled"
+  result_prefix: "golf/swing/analysis"
+  discovery_prefix: "homeassistant"
+  device_name: "Golf Swing Analyzer"
+  device_id: "golf_swing_analyzer"
+
+llm:
+  enabled: false
+  endpoint: "http://localhost:11434/api/generate"
+  model: "trinity"
+  timeout_seconds: 60

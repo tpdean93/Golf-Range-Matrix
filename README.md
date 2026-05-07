@@ -9,6 +9,7 @@ This repo contains:
 - `custom_components/golf_range_matrix/`: the HACS custom integration with SQLite storage, native entities, services, bundled cards, dashboard templates, and optional InfluxDB export.
 - `custom-cards/`: Lovelace cards for shot tracing, metric panels, history, session controls, bag building, and wedge matrix.
 - `scripts/nova_shot_logger.py`: local MQTT-to-SQLite shot logger for per-player/per-club shot history.
+- `tools/swing-analyzer/`: local Swing Analyzer service for MQTT-driven OBS replay capture, MediaPipe pose analysis, annotated MP4 output, and Home Assistant MQTT discovery.
 - `docs/hacs-integration.md`: install, migration, backup, and release notes for the integration.
 - `docs/mqtt-contract.md`: MQTT topics and payloads for the HA dashboard and lab PC bridge.
 - `docs/home-assistant.md`: helper/card setup notes.
@@ -25,6 +26,12 @@ The recommended product path is now `Golf Range Matrix` as a Home Assistant cust
 5. Add `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource or use the bundled dashboard template at `/golf_range_matrix/dashboards/golf-range-matrix-dashboard.json`.
 
 The integration stores app data in `golf_range_matrix.sqlite3` under the Home Assistant config directory. Profiles, bags, club metadata, wedge matrices, shots, and summaries are no longer stored in mutable chunked `input_text` helpers.
+
+## Local Swing Analyzer
+
+The optional local Swing Analyzer service lives in `tools/swing-analyzer/`. It subscribes to the same `golf/shot/raw` MQTT events as Range Matrix, saves OBS replay-buffer clips, runs MediaPipe pose analysis, serves annotated slow-motion MP4s, and publishes Home Assistant MQTT discovery for the `Golf Swing Analyzer` device.
+
+See `tools/swing-analyzer/README.md` for install steps, OBS replay-buffer setup, the `mqtt_swing` user, paho-mqtt installation into OBS, and dashboard wiring. OBS Replay Buffer must be started in OBS before `SaveReplayBuffer` can produce source MP4s. Annotated videos default to 0.5x speed via `annotation.slow_motion_factor` in the analyzer config.
 
 ## Run The Logger
 
