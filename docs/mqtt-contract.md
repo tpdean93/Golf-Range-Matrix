@@ -70,11 +70,35 @@ The Swing Analyzer service subscribes to:
 The Swing Analyzer publishes:
 
 - `golf/swing/analysis/availability`: retained `online`/`offline`.
-- `golf/swing/analysis/latest`: retained JSON for the most recent analysis.
+- `golf/swing/analysis/latest`: retained JSON for the most recent analysis, including `body`, `advanced`, `scores`, `score_summary`, video URLs, and LLM output when enabled.
 - `golf/swing/analysis/recent`: retained JSON list of recent analyses.
 - Home Assistant MQTT discovery configs under `homeassistant/switch/golf_swing_analyzer/enabled/config` and `homeassistant/sensor/golf_swing_analyzer/<id>/config`.
 
+Score sensors are discovered from the latest JSON for posture delta, hip-depth retention, impact shoulder tilt, transition score, and balance score. Hip-depth and balance values are camera-specific 2D trend metrics, not calibrated 3D measurements.
+
 The analyzer's MP4 playback is not MQTT. Annotated/raw video files are served directly from the sim PC over HTTP, usually on TCP port `8765`, using URLs published in `golf/swing/analysis/latest`.
+
+## SIM Control Agent MQTT Topics
+
+The optional SIM Control Agent subscribes to:
+
+- `golf/sim/control/command`: fixed command payloads from Home Assistant buttons.
+
+Supported command payloads:
+
+- `restart_obs`
+- `start_obs`
+- `start_replay_buffer`
+- `save_replay_buffer`
+- `restart_analyzer`
+
+The SIM Control Agent publishes:
+
+- `golf/sim/control/availability`: retained `online`/`offline`.
+- `golf/sim/control/status`: retained JSON with `ok`, `last_command`, `last_result`, `obs_running`, and `timestamp`.
+- Home Assistant MQTT discovery configs under `homeassistant/button/golf_sim_control/<id>/config` and `homeassistant/sensor/golf_sim_control/<id>/config`.
+
+The command topic intentionally accepts only known command names. It does not execute arbitrary shell commands from MQTT.
 
 ## Discard Last Shot
 

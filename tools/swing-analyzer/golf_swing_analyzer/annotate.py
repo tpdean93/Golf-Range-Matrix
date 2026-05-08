@@ -114,11 +114,13 @@ def annotate_video(
     frames: List[FramePose],
     phases: SwingPhases,
     body_metrics: Dict[str, object],
+    advanced_metrics: Optional[Dict[str, object]],
     nova: Dict[str, object],
     faults: List[str],
     clip_start_frame: Optional[int] = None,
     clip_end_frame: Optional[int] = None,
     slow_motion_factor: float = 1.0,
+    overlay_options: Optional[Dict[str, object]] = None,
 ) -> bool:
     import cv2
 
@@ -149,6 +151,7 @@ def annotate_video(
 
     pose_by_idx: Dict[int, FramePose] = {f.frame_index: f for f in frames}
     last_pose: Optional[FramePose] = None
+    overlays = overlay_options or {}
 
     def _src(sample_idx: Optional[int]) -> Optional[int]:
         if sample_idx is None or sample_idx < 0 or sample_idx >= len(frames):
@@ -182,12 +185,15 @@ def annotate_video(
                 last_pose = pose
                 _draw_skeleton(frame, pose)
                 _draw_lines(frame, pose)
+            if overlays.get("advanced", True) and isinstance(advanced_metrics, dict):
+                _draw_advanced_overlays(frame, idx, advanced_metrics, overlays)
 
             _draw_hud(
                 frame,
                 idx,
                 src_phases,
                 body_metrics,
+                advanced_metrics or {},
                 nova,
                 faults,
             )
@@ -253,11 +259,113 @@ def _draw_lines(frame, pose: FramePose) -> None:
         cv2.line(frame, sh, hp, (200, 200, 255), 2)
 
 
+def _point(value) -> Optional[tuple[int, int]]:
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            return (int(value[0]), int(value[1]))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _draw_line_dict(frame, line: object, color: tuple[int, int, int], thickness: int = 2) -> None:
+    import cv2
+
+    if not isinstance(line, dict):
+        return
+    start = _point(line.get("start"))
+    end = _point(line.get("end"))
+    if start and end:
+        cv2.line(frame, start, end, color, thickness)
+
+
+def _draw_polyline(frame, points: List[tuple[int, int]], color: tuple[int, int, int], thickness: int = 2) -> None:
+    import cv2
+
+    if len(points) < 2:
+        return
+    for a, b in zip(points, points[1:]):
+        cv2.line(frame, a, b, color, thickness)
+
+
+def _draw_advanced_overlays(
+    frame,
+    idx: int,
+    package: Dict[str, object],
+    overlays: Dict[str, object],
+) -> None:
+    import cv2
+
+    advanced = package.get("advanced") if isinstance(package, dict) else None
+    if not isinstance(advanced, dict):
+        return
+
+    pelvis = advanced.get("pelvis_depth_line")
+    if overlays.get("pelvis_depth_line", True) and isinstance(pelvis, dict):
+        _draw_line_dict(frame, pelvis.get("reference"), (255, 180, 60), 2)
+        address = _point(pelvis.get("address_center"))
+        impact = _point(pelvis.get("impact_center"))
+        if address and impact:
+            cv2.circle(frame, address, 6, (255, 180, 60), 2)
+            cv2.circle(frame, impact, 6, (80, 255, 255), 2)
+            cv2.line(frame, address, impact, (80, 255, 255), 2)
+            cv2.putText(frame, "pelvis depth", (address[0] + 8, max(18, address[1] - 8)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 180, 60), 1)
+
+    spine = advanced.get("spine_inclination_line")
+    if overlays.get("spine_inclination_line", True) and isinstance(spine, dict):
+        _draw_line_dict(frame, spine.get("address"), (120, 180, 255), 2)
+        _draw_line_dict(frame, spine.get("impact"), (80, 255, 255), 2)
+
+    head = advanced.get("head_box")
+    if overlays.get("head_box", True) and isinstance(head, dict):
+        rect = head.get("rect")
+        center = _point(head.get("address_center"))
+        if isinstance(rect, list) and len(rect) == 4:
+            try:
+                x1, y1, x2, y2 = [int(v) for v in rect]
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (120, 255, 120), 2)
+                cv2.putText(frame, "head box", (x1, max(18, y1 - 8)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (120, 255, 120), 1)
+            except (TypeError, ValueError):
+                pass
+        if center:
+            cv2.circle(frame, center, 5, (120, 255, 120), 2)
+
+    shoulder_trace = advanced.get("shoulder_plane_trace")
+    if overlays.get("shoulder_plane_trace", True) and isinstance(shoulder_trace, list):
+        for item in shoulder_trace:
+            if not isinstance(item, dict) or item.get("phase") not in {"address", "top", "impact"}:
+                continue
+            color = (255, 200, 0) if item.get("phase") == "address" else (80, 255, 255)
+            _draw_line_dict(frame, item, color, 2)
+
+    hand_trace = advanced.get("hand_path_trace")
+    if overlays.get("hand_path_trace", True) and isinstance(hand_trace, list):
+        past_points: List[tuple[int, int]] = []
+        all_points: List[tuple[int, int]] = []
+        for item in hand_trace:
+            if not isinstance(item, dict):
+                continue
+            point = _point([item.get("x"), item.get("y")])
+            if not point:
+                continue
+            all_points.append(point)
+            frame_index = item.get("frame_index")
+            if isinstance(frame_index, int) and frame_index <= idx:
+                past_points.append(point)
+        _draw_polyline(frame, all_points, (100, 100, 100), 1)
+        _draw_polyline(frame, past_points, (255, 80, 255), 3)
+        if past_points:
+            cv2.circle(frame, past_points[-1], 5, (255, 80, 255), -1)
+
+
 def _draw_hud(
     frame,
     idx: int,
     phases: SwingPhases,
     body_metrics: Dict[str, object],
+    advanced_metrics: Dict[str, object],
     nova: Dict[str, object],
     faults: List[str],
 ) -> None:
@@ -323,6 +431,13 @@ def _draw_hud(
     tempo = body_metrics.get("tempo") if isinstance(body_metrics, dict) else None
     if isinstance(tempo, dict) and tempo.get("backswing_to_downswing_ratio"):
         body_lines.append(f"Tempo: {tempo['backswing_to_downswing_ratio']}:1")
+    score_summary = (
+        advanced_metrics.get("score_summary")
+        if isinstance(advanced_metrics, dict)
+        else None
+    )
+    if score_summary:
+        body_lines.append(str(score_summary))
 
     for line in body_lines:
         cv2.putText(

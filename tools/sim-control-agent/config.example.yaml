@@ -1,0 +1,30 @@
+mqtt:
+  enabled: true
+  host: "CHANGE-ME"
+  port: 1883
+  username: "mqtt_swing"
+  password: "CHANGE-ME"
+  client_id: "golf_sim_control_agent"
+  command_topic: "golf/sim/control/command"
+  status_topic: "golf/sim/control/status"
+  discovery_prefix: "homeassistant"
+  device_name: "Golf SIM Control"
+  device_id: "golf_sim_control"
+
+obs:
+  process_name: "obs64.exe"
+  exe_path: "C:/Program Files/obs-studio/bin/64bit/obs64.exe"
+  working_dir: "C:/Program Files/obs-studio/bin/64bit"
+  restart_wait_seconds: 4
+  websocket:
+    host: "127.0.0.1"
+    port: 4455
+    password: "CHANGE-ME"
+    timeout_seconds: 8
+
+analyzer:
+  # Optional. Leave blank unless you want the Restart Swing Analyzer button to
+  # run your own local commands.
+  stop_command: ""
+  start_command: ""
+  working_dir: "C:/golf-range-matrix/tools/swing-analyzer"

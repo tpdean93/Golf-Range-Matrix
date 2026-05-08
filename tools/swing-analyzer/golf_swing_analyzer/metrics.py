@@ -214,6 +214,280 @@ def _knee_angle_deg(frame: FramePose, side: str) -> Optional[float]:
     return float(np.degrees(np.arccos(cos_angle)))
 
 
+def _line_between(frame: FramePose, a: str, b: str) -> Optional[Dict[str, object]]:
+    if not _have(frame, a, b, min_vis=0.3):
+        return None
+    p1 = frame.pixel_landmarks[a]
+    p2 = frame.pixel_landmarks[b]
+    return {
+        "start": [int(p1[0]), int(p1[1])],
+        "end": [int(p2[0]), int(p2[1])],
+        "angle_deg": round(angle_deg(p1, p2), 1),
+    }
+
+
+def _midpoint_px(frame: FramePose, a: str, b: str) -> Optional[Tuple[float, float]]:
+    if not _have(frame, a, b, min_vis=0.3):
+        return None
+    return midpoint(frame.pixel_landmarks[a], frame.pixel_landmarks[b])
+
+
+def _spine_line(frame: FramePose) -> Optional[Dict[str, object]]:
+    sh = _midpoint_px(frame, "left_shoulder", "right_shoulder")
+    hp = _midpoint_px(frame, "left_hip", "right_hip")
+    if sh is None or hp is None:
+        return None
+    return {
+        "start": [int(sh[0]), int(sh[1])],
+        "end": [int(hp[0]), int(hp[1])],
+        "angle_deg": round(angle_deg(sh, hp), 1),
+    }
+
+
+def _label_score(score: float, good: float = 75.0, watch: float = 55.0) -> str:
+    if score >= good:
+        return "good"
+    if score >= watch:
+        return "watch"
+    return "poor"
+
+
+def _clamp_score(value: float) -> float:
+    return round(max(0.0, min(100.0, value)), 1)
+
+
+def _phase_frame(frames: List[FramePose], idx: Optional[int]) -> Optional[FramePose]:
+    if idx is None or idx < 0 or idx >= len(frames):
+        return None
+    return frames[idx]
+
+
+def _downsample(points: List[Dict[str, object]], limit: int = 80) -> List[Dict[str, object]]:
+    if len(points) <= limit:
+        return points
+    step = max(1, int(np.ceil(len(points) / limit)))
+    sampled = points[::step]
+    if points[-1] is not sampled[-1]:
+        sampled.append(points[-1])
+    return sampled
+
+
+def compute_advanced_metrics(
+    frames: List[FramePose],
+    phases: SwingPhases,
+    body: Dict[str, object],
+    width: int,
+    height: int,
+    camera_angle: str = "down_the_line",
+) -> Dict[str, object]:
+    """Return overlay geometry and camera-relative swing scores.
+
+    These are 2D pose-derived trend metrics. In down-the-line video, hip depth
+    is a frame-space proxy, not a calibrated 3D measurement.
+    """
+    if not frames or phases.address_idx is None or phases.impact_idx is None:
+        return {
+            "advanced": {},
+            "scores": {},
+            "score_summary": "Advanced swing metrics unavailable",
+        }
+
+    address = _phase_frame(frames, phases.address_idx)
+    top = _phase_frame(frames, phases.top_idx)
+    impact = _phase_frame(frames, phases.impact_idx)
+    finish = _phase_frame(frames, phases.finish_idx)
+    if address is None or impact is None:
+        return {
+            "advanced": {},
+            "scores": {},
+            "score_summary": "Advanced swing metrics unavailable",
+        }
+
+    px_unit = max(1.0, min(width, height) / 100.0)
+    address_hip = _midpoint_px(address, "left_hip", "right_hip")
+    impact_hip = _midpoint_px(impact, "left_hip", "right_hip")
+    address_head = address.pixel_landmarks.get("nose") if _have(address, "nose") else None
+
+    pelvis_reference = _line_between(address, "left_hip", "right_hip")
+    pelvis_depth_line = None
+    hip_depth_retention_pct = None
+    hip_depth_delta_px = None
+    if address_hip is not None and impact_hip is not None:
+        hip_depth_delta_px = impact_hip[1] - address_hip[1]
+        retained = 100.0 - min(100.0, abs(hip_depth_delta_px) / (px_unit * 6.0) * 100.0)
+        hip_depth_retention_pct = _clamp_score(retained)
+        pelvis_depth_line = {
+            "reference": pelvis_reference,
+            "address_center": [int(address_hip[0]), int(address_hip[1])],
+            "impact_center": [int(impact_hip[0]), int(impact_hip[1])],
+            "delta_px": round(float(hip_depth_delta_px), 1),
+            "note": "2D down-the-line hip-depth proxy",
+        }
+
+    spine_lines = {
+        "address": _spine_line(address),
+        "impact": _spine_line(impact),
+    }
+
+    head_points: List[Tuple[int, int]] = []
+    for frame in frames[phases.address_idx: phases.impact_idx + 1]:
+        if _have(frame, "nose"):
+            head_points.append(frame.pixel_landmarks["nose"])
+    head_box = None
+    if address_head and head_points:
+        xs = [p[0] for p in head_points]
+        ys = [p[1] for p in head_points]
+        pad = int(max(10, width * 0.015))
+        max_dx = max(abs(p[0] - address_head[0]) for p in head_points)
+        max_dy = max(abs(p[1] - address_head[1]) for p in head_points)
+        head_box = {
+            "rect": [int(min(xs) - pad), int(min(ys) - pad), int(max(xs) + pad), int(max(ys) + pad)],
+            "address_center": [int(address_head[0]), int(address_head[1])],
+            "max_excursion_px": round(float((max_dx * max_dx + max_dy * max_dy) ** 0.5), 1),
+            "max_horizontal_px": int(max_dx),
+            "max_vertical_px": int(max_dy),
+        }
+
+    shoulder_plane_trace: List[Dict[str, object]] = []
+    phase_lookup = {
+        phases.address_idx: "address",
+        phases.top_idx: "top",
+        phases.impact_idx: "impact",
+        phases.finish_idx: "finish",
+    }
+    for idx, frame in enumerate(frames):
+        line = _line_between(frame, "left_shoulder", "right_shoulder")
+        if line is None:
+            continue
+        shoulder_plane_trace.append({
+            "frame_index": int(frame.frame_index),
+            "phase": phase_lookup.get(idx),
+            "angle_deg": line["angle_deg"],
+            "start": line["start"],
+            "end": line["end"],
+        })
+    shoulder_plane_trace = _downsample(shoulder_plane_trace)
+
+    hand_path_trace: List[Dict[str, object]] = []
+    start_idx = max(0, phases.address_idx)
+    end_idx = phases.finish_idx if phases.finish_idx is not None else len(frames) - 1
+    for idx, frame in enumerate(frames[start_idx:end_idx + 1], start=start_idx):
+        wrist = _wrist_xy(frame)
+        if wrist is None:
+            continue
+        hand_path_trace.append({
+            "frame_index": int(frame.frame_index),
+            "phase": phase_lookup.get(idx),
+            "x": int(wrist[0]),
+            "y": int(wrist[1]),
+        })
+    hand_path_trace = _downsample(hand_path_trace)
+
+    transition_steepness_score = None
+    transition_angle_deg = None
+    if phases.top_idx is not None and hand_path_trace:
+        top_frame = frames[phases.top_idx]
+        top_wrist = _wrist_xy(top_frame)
+        lookahead_idx = min(len(frames) - 1, phases.top_idx + max(2, (phases.impact_idx - phases.top_idx) // 3))
+        early_wrist = _wrist_xy(frames[lookahead_idx])
+        if top_wrist is not None and early_wrist is not None:
+            dx = early_wrist[0] - top_wrist[0]
+            dy = early_wrist[1] - top_wrist[1]
+            transition_angle_deg = round(float(np.degrees(np.arctan2(abs(dy), abs(dx) or 1.0))), 1)
+            # Very vertical first move gets flagged as steep; mid-range is neutral.
+            transition_steepness_score = _clamp_score(100.0 - max(0.0, transition_angle_deg - 55.0) * 2.0)
+
+    spine = body.get("spine_angle") if isinstance(body, dict) else None
+    head = body.get("head_movement") if isinstance(body, dict) else None
+    hip = body.get("hip_sway") if isinstance(body, dict) else None
+    knees = body.get("knee_flex") if isinstance(body, dict) else None
+    shoulder = body.get("shoulder_tilt") if isinstance(body, dict) else None
+
+    spine_loss = abs(float(spine.get("loss_deg", 0.0))) if isinstance(spine, dict) else 0.0
+    head_move_pct = abs(float(head.get("horizontal_pct", 0.0))) if isinstance(head, dict) else 0.0
+    hip_move_units = abs(float(hip.get("horizontal_px", 0.0))) / px_unit if isinstance(hip, dict) else 0.0
+    knee_change = 0.0
+    if isinstance(knees, dict):
+        changes = [
+            abs(float(v.get("change_deg", 0.0)))
+            for v in knees.values()
+            if isinstance(v, dict) and v.get("change_deg") is not None
+        ]
+        knee_change = sum(changes) / len(changes) if changes else 0.0
+
+    posture_penalty = spine_loss * 2.2 + head_move_pct * 6.0 + hip_move_units * 5.0 + knee_change * 0.8
+    posture_delta_score = _clamp_score(100.0 - posture_penalty)
+    shoulder_tilt_impact = (
+        float(shoulder.get("impact_deg"))
+        if isinstance(shoulder, dict) and shoulder.get("impact_deg") is not None
+        else None
+    )
+
+    finish_stability = 0.0
+    if finish is not None and impact_hip is not None and _have(finish, "left_hip", "right_hip"):
+        finish_hip = _midpoint_px(finish, "left_hip", "right_hip")
+        if finish_hip is not None:
+            finish_stability = abs(finish_hip[0] - impact_hip[0]) / px_unit
+    head_excursion = float(head_box.get("max_excursion_px", 0.0)) / px_unit if isinstance(head_box, dict) else 0.0
+    visibility_values = [
+        v
+        for frame in (address, impact, finish)
+        if frame is not None
+        for v in frame.visibility.values()
+    ]
+    visibility_score = (sum(visibility_values) / len(visibility_values) * 100.0) if visibility_values else 70.0
+    balance_score = _clamp_score(visibility_score - head_excursion * 2.5 - finish_stability * 2.0)
+
+    scores = {
+        "address_vs_impact_posture_delta": {
+            "score": posture_delta_score,
+            "label": _label_score(posture_delta_score),
+            "spine_loss_deg": round(spine_loss, 1),
+            "head_move_pct": round(head_move_pct, 2),
+            "hip_move_units": round(hip_move_units, 2),
+            "avg_knee_change_deg": round(knee_change, 1),
+        },
+        "hip_depth_retention_pct": {
+            "score": hip_depth_retention_pct,
+            "label": _label_score(float(hip_depth_retention_pct or 0.0)),
+            "delta_px": hip_depth_delta_px,
+            "camera_angle": camera_angle,
+        },
+        "shoulder_tilt_impact_deg": None if shoulder_tilt_impact is None else round(shoulder_tilt_impact, 1),
+        "transition_steepness_score": {
+            "score": transition_steepness_score,
+            "label": _label_score(float(transition_steepness_score or 0.0)),
+            "angle_deg": transition_angle_deg,
+        },
+        "balance_score": {
+            "score": balance_score,
+            "label": _label_score(balance_score),
+            "head_excursion_units": round(head_excursion, 2),
+            "finish_stability_units": round(finish_stability, 2),
+        },
+    }
+
+    advanced = {
+        "pelvis_depth_line": pelvis_depth_line,
+        "spine_inclination_line": spine_lines,
+        "head_box": head_box,
+        "shoulder_plane_trace": shoulder_plane_trace,
+        "hand_path_trace": hand_path_trace,
+    }
+
+    summary_parts = [
+        f"posture {posture_delta_score:.0f}/{100}",
+        f"hip depth {hip_depth_retention_pct:.0f}%" if hip_depth_retention_pct is not None else "hip depth n/a",
+        f"transition {transition_steepness_score:.0f}/{100}" if transition_steepness_score is not None else "transition n/a",
+        f"balance {balance_score:.0f}/{100}",
+    ]
+    return {
+        "advanced": advanced,
+        "scores": scores,
+        "score_summary": ", ".join(summary_parts),
+    }
+
+
 def compute_body_metrics(
     frames: List[FramePose],
     phases: SwingPhases,

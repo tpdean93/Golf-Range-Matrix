@@ -223,6 +223,18 @@ class MQTTBridge:
              "{{ value_json.raw_url }}"),
             ("timestamp", "Last Swing Timestamp", None,
              "{{ value_json.timestamp }}"),
+            ("score_summary", "Last Swing Score Summary", None,
+             "{{ value_json.score_summary | default('', true) }}"),
+            ("posture_delta", "Last Swing Posture Delta", None,
+             "{{ value_json.scores.address_vs_impact_posture_delta.score | default('', true) }}"),
+            ("hip_depth_retention", "Last Swing Hip Depth Retention", "%",
+             "{{ value_json.scores.hip_depth_retention_pct.score | default('', true) }}"),
+            ("shoulder_tilt_impact", "Last Swing Shoulder Tilt Impact", "deg",
+             "{{ value_json.scores.shoulder_tilt_impact_deg | default('', true) }}"),
+            ("transition_score", "Last Swing Transition Score", None,
+             "{{ value_json.scores.transition_steepness_score.score | default('', true) }}"),
+            ("balance_score", "Last Swing Balance Score", None,
+             "{{ value_json.scores.balance_score.score | default('', true) }}"),
         ]
         for object_id, friendly, unit, tpl in sensors:
             payload_cfg: Dict[str, Any] = {

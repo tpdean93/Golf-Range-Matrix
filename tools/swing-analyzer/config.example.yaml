@@ -20,6 +20,13 @@ camera:
 
 annotation:
   slow_motion_factor: 0.5
+  overlays:
+    advanced: true
+    pelvis_depth_line: true
+    spine_inclination_line: true
+    head_box: true
+    shoulder_plane_trace: true
+    hand_path_trace: true
 
 server:
   host: "0.0.0.0"

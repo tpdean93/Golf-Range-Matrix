@@ -6,6 +6,7 @@ Local-only golf swing analysis pipeline that ties together:
 - **OBS replay buffer** for swing video
 - **MediaPipe Pose** for body tracking
 - **OpenCV** for an annotated video overlay
+- **Deterministic swing scores** for posture, hip-depth retention, transition, and balance trends
 - **Optional local LLM** (Ollama / Trinity) for a coaching summary
 - **Home Assistant** for triggering and displaying everything
 
@@ -42,6 +43,7 @@ Use this split when debugging or explaining the install:
 - **Sim PC** runs OBS, the Open Golf Coach OBS script, OBS Replay Buffer, OBS WebSocket, and this Python Swing Analyzer service.
 - **MQTT is the event bus.** OBS publishes each Nova shot to `golf/shot/raw`; Range Matrix and the Swing Analyzer both subscribe to that same event. Range Matrix publishes retained context to `golf/context/current`, and the analyzer subscribes to that context.
 - **TCP/HTTP is only for video playback.** The analyzer runs a tiny Flask server on TCP `8765` so Home Assistant dashboards can fetch annotated MP4s from URLs like `http://192.168.68.150:8765/videos/annotated/<file>.mp4`.
+- **SIM Control Agent is optional recovery tooling.** `tools/sim-control-agent/` can expose Home Assistant buttons to restart OBS, start/save Replay Buffer, and optionally restart this analyzer if the OBS script stops publishing after launching GSPro.
 
 That means a shot can be logged successfully through MQTT while the dashboard video still fails if Windows Firewall blocks TCP `8765` or `server.public_base_url` points at the wrong sim PC IP.
 
@@ -129,6 +131,7 @@ Copy `config.example.yaml` to `config.yaml`, then edit it:
 - `server.public_base_url` — set this to the sim PC URL, e.g. `http://192.168.68.150:8765`.
 - `obs.port` and `obs.password` — match OBS WebSocket settings.
 - `camera.angle` — `down_the_line` or `face_on`.
+- `annotation.overlays.*` — turn individual advanced overlays off if the video gets visually cluttered.
 - `llm.enabled` — `true` if you have Ollama / Trinity running locally.
 
 If the dashboard browser is not on the sim PC, allow inbound TCP `8765` through Windows Firewall. Home Assistant and kiosk clients fetch annotated MP4s directly from `server.public_base_url`.
@@ -163,6 +166,12 @@ When the service starts, MQTT discovery creates a `Golf Swing Analyzer` device. 
 - `sensor.golf_swing_analyzer_last_swing_annotated_url`
 - `sensor.golf_swing_analyzer_last_swing_raw_url`
 - `sensor.golf_swing_analyzer_last_swing_timestamp`
+- `sensor.golf_swing_analyzer_last_swing_score_summary`
+- `sensor.golf_swing_analyzer_last_swing_posture_delta`
+- `sensor.golf_swing_analyzer_last_swing_hip_depth_retention`
+- `sensor.golf_swing_analyzer_last_swing_shoulder_tilt_impact`
+- `sensor.golf_swing_analyzer_last_swing_transition_score`
+- `sensor.golf_swing_analyzer_last_swing_balance_score`
 
 Add the `ha_dashboard_swing.yaml` view to the Range Matrix dashboard, or use the bundled dashboard template in the integration. The bundled `/golf_range_matrix/golf-range-matrix-cards.js` resource includes `custom:range-swing-video-card`, which loops the latest annotated MP4 and includes a compact analyzer on/off control.
 
@@ -197,7 +206,7 @@ Range Matrix also publishes retained context to `golf/context/current` whenever 
 
 ## LLM Coaching
 
-The first-pass heuristics are intentionally conservative: they extract pose metrics, derive obvious faults, and write a short body summary. For richer feedback, enable `llm.enabled` and point `llm.endpoint` at a local model server such as Ollama:
+The deterministic heuristics extract pose metrics, advanced overlay traces, swing scores, obvious faults, and a short score summary. For richer feedback, enable `llm.enabled` and point `llm.endpoint` at a local model server such as Ollama:
 
 ```yaml
 llm:
@@ -207,19 +216,55 @@ llm:
   timeout_seconds: 60
 ```
 
-The LLM receives the structured analysis JSON: club, camera angle, NOVA metrics, body metrics, detected faults, and the heuristic summary. A good next iteration is to tune `llm.py` with your preferred coaching style and have it return a stricter JSON object with priorities, drills, and confidence.
+The LLM receives the structured analysis JSON: club, camera angle, NOVA metrics, body metrics, advanced traces, deterministic scores, detected faults, and the score summary. It is asked to return:
+
+```json
+{
+  "priority_fault": "...",
+  "why_it_matters": "...",
+  "evidence": ["...", "..."],
+  "drill": "...",
+  "confidence": "low|medium|high"
+}
+```
 
 Keep the deterministic heuristics as the source of truth for extracted measurements. Use the LLM to explain patterns, rank likely issues, and suggest drills rather than to invent measurements from the video.
 
-## Camera And FPS Notes
+## Advanced Overlays And Scores
+
+The annotated MP4 can draw a second analysis layer:
+
+- Pelvis depth reference line and address-to-impact hip-center movement.
+- Address and impact spine inclination lines.
+- Address-centered head movement box.
+- Shoulder plane trace through address, top, and impact.
+- Hand path trace through the swing.
+- Compact HUD with the score summary.
+
+The `scores` object in each analysis JSON includes posture delta, hip-depth retention percentage, impact shoulder tilt, transition steepness score, and balance score. These are conservative trend metrics until you validate them against more swings.
+
+## Camera Calibration And FPS Notes
 
 Higher FPS should improve phase detection because impact, transition, and early extension happen quickly. After upgrading the camera:
 
+- Keep the camera fixed, level, and square to the target line. Re-aiming the camera changes the baseline for hip-depth and balance trends.
+- For down-the-line video, place the camera on the hand-line/target-line view you intend to keep using, then compare future swings from that same setup.
 - Keep OBS recording the camera at its real frame rate and verify the saved MP4 reports that FPS correctly.
 - Set `camera.fps_sample_rate: 1` if the sim PC can handle analyzing every frame. Use `2` or higher if MediaPipe CPU/GPU load is too high.
 - Keep shutter speed and lighting high enough to reduce motion blur; higher FPS alone will not help if the body landmarks smear.
 - Recheck `annotation.slow_motion_factor`; 0.5x is good for review, but very high FPS clips may look better at 0.4x or 0.25x.
-- Keep the down-the-line camera square to the target line before comparing swing-to-swing metrics.
+- Treat hip depth and balance scores as camera-specific trend metrics, not absolute 3D measurements.
+
+## Validation
+
+After updating the sim PC, restart the analyzer service so it loads the new Python files. Then:
+
+1. Analyze 3-5 known swings from the current camera.
+2. Confirm the head box, pelvis line, spine lines, shoulder trace, and hand path line up with the body.
+3. Confirm the annotated MP4 still plays and loops in Home Assistant.
+4. Confirm the selected Range Matrix club appears in the overlay HUD.
+5. Confirm the new MQTT score sensors appear under the `Golf Swing Analyzer` device.
+6. Re-test after installing the higher-FPS camera, especially phase timing and hand path smoothness.
 
 ---
 

@@ -150,6 +150,20 @@
                 "sensor.golf_swing_analyzer_last_swing_raw_url",
                 "sensor.golf_swing_analyzer_last_swing_timestamp"
               ]
+            },
+            {
+              "type": "entities",
+              "title": "SIM Control",
+              "entities": [
+                "button.golf_sim_control_restart_obs_bridge",
+                "button.golf_sim_control_start_obs",
+                "button.golf_sim_control_start_replay_buffer",
+                "button.golf_sim_control_save_replay_buffer",
+                "button.golf_sim_control_restart_swing_analyzer",
+                "sensor.golf_sim_control_status",
+                "sensor.golf_sim_control_last_result",
+                "sensor.golf_sim_control_obs_running"
+              ]
             }
           ]
         }

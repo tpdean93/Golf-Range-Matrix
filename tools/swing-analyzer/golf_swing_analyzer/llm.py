@@ -13,8 +13,9 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = (
     "You are a golf swing analysis assistant. "
     "Do not claim certainty from limited camera data. "
-    "Use NOVA for club/ball metrics and pose tracking for body mechanics. "
-    "Give practical, concise feedback with one or two drills. "
+    "Use NOVA for club/ball metrics and deterministic pose scores for body mechanics. "
+    "Do not invent measurements that are not present in the analysis JSON. "
+    "Explain cause and effect briefly and give one practical drill. "
     "Reply with strict JSON only, matching the requested schema."
 )
 
@@ -35,13 +36,17 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         f"Camera angle: {analysis.get('camera_angle')}\n"
         f"NOVA metrics: {json.dumps(analysis.get('nova', {}))}\n"
         f"Body metrics: {json.dumps(analysis.get('body', {}))}\n"
+        f"Advanced traces: {json.dumps(analysis.get('advanced', {}))}\n"
+        f"Swing scores: {json.dumps(analysis.get('scores', {}))}\n"
+        f"Score summary: {analysis.get('score_summary')}\n"
         f"Detected faults: {json.dumps(analysis.get('faults', []))}\n\n"
+        "Treat hip depth and balance as camera-specific trend metrics, not true 3D measurements.\n"
         "Reply with JSON only:\n"
         "{\n"
-        '  "summary": "...",\n'
-        '  "likely_cause": "...",\n'
-        '  "recommended_fix": "...",\n'
-        '  "drills": ["...", "..."],\n'
+        '  "priority_fault": "...",\n'
+        '  "why_it_matters": "...",\n'
+        '  "evidence": ["...", "..."],\n'
+        '  "drill": "...",\n'
         '  "confidence": "low|medium|high"\n'
         "}"
     )

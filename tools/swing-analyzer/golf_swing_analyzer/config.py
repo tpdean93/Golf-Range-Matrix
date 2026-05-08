@@ -28,6 +28,14 @@ DEFAULTS: Dict[str, Any] = {
     },
     "annotation": {
         "slow_motion_factor": 0.5,
+        "overlays": {
+            "advanced": True,
+            "pelvis_depth_line": True,
+            "spine_inclination_line": True,
+            "head_box": True,
+            "shoulder_plane_trace": True,
+            "hand_path_trace": True,
+        },
     },
     "server": {
         "host": "0.0.0.0",

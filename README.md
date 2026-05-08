@@ -10,6 +10,7 @@ This repo contains:
 - `custom-cards/`: Lovelace cards for shot tracing, metric panels, history, session controls, bag building, and wedge matrix.
 - `scripts/nova_shot_logger.py`: legacy local MQTT-to-SQLite shot logger for per-player/per-club shot history.
 - `tools/swing-analyzer/`: local Swing Analyzer service for MQTT-driven OBS replay capture, MediaPipe pose analysis, annotated MP4 output, and Home Assistant MQTT discovery.
+- `tools/sim-control-agent/`: local SIM PC control agent for Home Assistant buttons that restart OBS, start/save Replay Buffer, and optionally restart the Swing Analyzer.
 - `docs/hacs-integration.md`: install, migration, backup, and release notes for the integration.
 - `docs/mqtt-contract.md`: MQTT topics and payloads for the HA dashboard and lab PC bridge.
 - `docs/home-assistant.md`: helper/card setup notes.
@@ -45,6 +46,12 @@ At a high level, the working setup is:
 4. Configure OBS Replay Buffer and OBS WebSocket. OBS must have Replay Buffer started so `SaveReplayBuffer` can write MP4s.
 5. Let Range Matrix publish selected player/club context to `golf/context/current`; the analyzer uses that retained context so the overlay matches the dashboard-selected club.
 6. Open TCP `8765` on the sim PC firewall. Home Assistant and dashboard browsers fetch annotated MP4s from the analyzer HTTP server at `http://<sim-pc-ip>:8765/videos/...`.
+
+## SIM Control Agent
+
+The optional SIM Control Agent lives in `tools/sim-control-agent/`. It runs on the sim PC and publishes Home Assistant MQTT discovery for recovery buttons such as Restart OBS Bridge, Start Replay Buffer, Save Replay Buffer, and Restart Swing Analyzer.
+
+Use it when OBS or the Open Golf Coach script stops pushing shots after launching GSPro or changing simulator state. The agent listens on fixed MQTT commands only; it does not run arbitrary shell payloads from Home Assistant. See `tools/sim-control-agent/README.md` for setup.
 
 ## Run The Logger
 

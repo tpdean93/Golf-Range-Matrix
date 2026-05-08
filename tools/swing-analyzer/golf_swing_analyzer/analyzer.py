@@ -37,7 +37,7 @@ from watchdog.observers import Observer
 from .annotate import annotate_video
 from .config import load_config
 from .llm import generate_summary
-from .metrics import compute_body_metrics, derive_faults, detect_phases
+from .metrics import compute_advanced_metrics, compute_body_metrics, derive_faults, detect_phases
 from .mqtt_bridge import MQTTBridge
 from .obs_client import OBSClient
 from .pose import detect_video_pose
@@ -256,6 +256,14 @@ class Analyzer:
             width=width,
             camera_angle=self.cfg["camera"]["angle"],
         )
+        advanced_package = compute_advanced_metrics(
+            frames=frames,
+            phases=phases,
+            body=body,
+            width=width,
+            height=height,
+            camera_angle=self.cfg["camera"]["angle"],
+        )
         faults = derive_faults(body, shot)
 
         clip_start, clip_end = self._swing_clip_range(frames, phases, fps)
@@ -264,12 +272,13 @@ class Analyzer:
         annotated_path = self.annotated_dir / f"{stamp}_annotated.mp4"
         annotated_ok = False
         try:
-            annotate_video(
+            annotated_ok = annotate_video(
                 video_path=str(video_path),
                 out_path=str(annotated_path),
                 frames=frames,
                 phases=phases,
                 body_metrics=body,
+                advanced_metrics=advanced_package,
                 nova=shot,
                 faults=faults,
                 clip_start_frame=clip_start,
@@ -277,8 +286,8 @@ class Analyzer:
                 slow_motion_factor=float(
                     self.cfg.get("annotation", {}).get("slow_motion_factor", 1.0)
                 ),
+                overlay_options=self.cfg.get("annotation", {}).get("overlays", {}),
             )
-            annotated_ok = True
         except Exception as e:
             log.exception("Annotation failed: %s", e)
 
@@ -301,6 +310,9 @@ class Analyzer:
             "annotated_url": annotated_url,
             "shot": shot,
             "body": body,
+            "advanced": advanced_package.get("advanced", {}),
+            "scores": advanced_package.get("scores", {}),
+            "score_summary": advanced_package.get("score_summary", ""),
             "faults": faults,
             "phases": {
                 "address_idx": phases.address_idx,
@@ -314,7 +326,11 @@ class Analyzer:
 
         llm_result = generate_summary(self.cfg.get("llm", {}), analysis)
         if llm_result:
-            analysis["summary"] = llm_result.get("summary", "")
+            analysis["summary"] = (
+                llm_result.get("summary")
+                or llm_result.get("priority_fault")
+                or analysis["body_summary"]
+            )
             analysis["llm"] = llm_result
         else:
             analysis["summary"] = analysis["body_summary"]
@@ -393,6 +409,7 @@ class Analyzer:
                 "annotated_url": data.get("annotated_url"),
                 "summary": data.get("summary"),
                 "faults_text": data.get("faults_text"),
+                "score_summary": data.get("score_summary"),
             })
 
         for _, analysis_path, data in analyses[keep:]:
