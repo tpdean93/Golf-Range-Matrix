@@ -304,6 +304,7 @@ class GolfSessionControlCard extends HTMLElement {
   select(entity, option) { this._hass.callService('select', 'select_option', { entity_id: entity, option }); }
   setShots(entity, value) { this._hass.callService('number', 'set_value', { entity_id: entity, value }); }
   pressButton(entity) { this._hass.callService('button', 'press', { entity_id: entity }); }
+  firstEntity(candidates) { return candidates.find(entity => novaState(this._hass, entity)) || candidates[0]; }
   pill(label, value, icon) {
     return `<div class="stat"><ha-icon icon="${icon}"></ha-icon><div><span>${novaEsc(label)}</span><b>${novaEsc(value ?? '--')}</b></div></div>`;
   }
@@ -321,13 +322,14 @@ class GolfSessionControlCard extends HTMLElement {
     const count = Number(workflow.bag_test_shot_count || 0);
     const target = Number(workflow.shots_per_club || novaValue(this._hass, shotsEntity) || 5);
     const simButtons = this.config.sim_buttons || [
-      ['button.golf_sim_control_select_swing_analyzer_scene', 'Scene', 'mdi:view-dashboard'],
-      ['button.golf_sim_control_start_replay_buffer', 'Replay', 'mdi:record-rec'],
-      ['button.golf_sim_control_restart_obs_bridge', 'Restart OBS', 'mdi:restart'],
+      [['button.golf_sim_control_select_swing_analyzer_scene', 'button.golf_sim_control_sim_control_select_swing_analyzer_scene'], 'Scene', 'mdi:view-dashboard'],
+      [['button.golf_sim_control_start_replay_buffer', 'button.golf_sim_control_sim_control_start_replay_buffer'], 'Replay', 'mdi:record-rec'],
+      [['button.golf_sim_control_restart_swing_analyzer', 'button.golf_sim_control_sim_control_restart_swing_analyzer'], 'Analyzer', 'mdi:motion-play'],
+      [['button.golf_sim_control_restart_obs_bridge', 'button.golf_sim_control_sim_control_restart_obs_bridge'], 'Restart OBS', 'mdi:restart'],
     ];
-    const simStatus = novaValue(this._hass, 'sensor.golf_sim_control_status');
-    const obsScene = novaValue(this._hass, 'sensor.golf_sim_control_obs_scene');
-    const sceneMatches = novaValue(this._hass, 'sensor.golf_sim_control_scene_matches') === 'True';
+    const simStatus = novaValue(this._hass, this.firstEntity(['sensor.golf_sim_control_status', 'sensor.golf_sim_control_sim_control_status']));
+    const obsScene = novaValue(this._hass, this.firstEntity(['sensor.golf_sim_control_obs_scene', 'sensor.golf_sim_control_sim_control_obs_scene']));
+    const sceneMatches = String(novaValue(this._hass, this.firstEntity(['sensor.golf_sim_control_scene_matches', 'sensor.golf_sim_control_sim_control_scene_matches']))).toLowerCase() === 'true';
     const simOnline = simStatus && !['unknown', 'unavailable'].includes(String(simStatus).toLowerCase());
     this.innerHTML = `<ha-card><div class="panel">
       <div class="head"><div><div class="kicker">Practice Control</div><div class="title">Session Controls</div></div><div class="live ${recording ? 'on' : ''}"><span></span>${recording ? 'Recording' : 'Not Recording'}</div></div>
@@ -351,7 +353,8 @@ class GolfSessionControlCard extends HTMLElement {
       <div class="simbar">
         <div class="simstatus ${sceneMatches ? 'ok' : ''}"><span></span>${simOnline ? `OBS: ${novaEsc(obsScene || 'unknown')}` : 'SIM agent offline'}</div>
         <div class="simactions">
-          ${simButtons.map(([entity, label, icon]) => {
+          ${simButtons.map(([entities, label, icon]) => {
+            const entity = Array.isArray(entities) ? this.firstEntity(entities) : entities;
             const state = novaValue(this._hass, entity);
             const disabled = !state || ['unknown', 'unavailable'].includes(String(state).toLowerCase());
             return `<button class="action sim ${disabled ? 'disabled' : ''}" data-button="${novaEsc(entity)}" ${disabled ? 'disabled' : ''}><ha-icon icon="${novaEsc(icon)}"></ha-icon>${novaEsc(label)}</button>`;
