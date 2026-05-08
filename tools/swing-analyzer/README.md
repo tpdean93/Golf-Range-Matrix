@@ -160,7 +160,7 @@ cd C:\golf-range-matrix\tools\swing-analyzer
 .\install-startup-task.ps1
 ```
 
-That creates a hidden Windows Scheduled Task named `Golf Swing Analyzer`. To remove it:
+That creates a Windows Scheduled Task named `Golf Swing Analyzer`. The scheduled task runs `.venv\Scripts\pythonw.exe`, so it runs in the background without a console window. To remove it:
 
 ```powershell
 .\uninstall-startup-task.ps1

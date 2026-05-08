@@ -62,7 +62,7 @@ cd C:\golf-range-matrix\tools\sim-control-agent
 .\install-startup-task.ps1
 ```
 
-That creates a hidden Windows Scheduled Task named `Golf SIM Control Agent`, starts it immediately, and starts it again whenever you log into the SIM PC.
+That creates a Windows Scheduled Task named `Golf SIM Control Agent`, starts it immediately, and starts it again whenever you log into the SIM PC. The scheduled task runs `.venv\Scripts\pythonw.exe`, so it runs in the background without a console window.
 
 To remove the task:
 
@@ -70,7 +70,7 @@ To remove the task:
 .\uninstall-startup-task.ps1
 ```
 
-For a manual one-click start, right-click `start-agent.ps1` and choose `Run with PowerShell`, or create a desktop shortcut to:
+For manual debugging with visible logs, right-click `start-agent.ps1` and choose `Run with PowerShell`, or create a desktop shortcut to:
 
 ```text
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\golf-range-matrix\tools\sim-control-agent\start-agent.ps1"

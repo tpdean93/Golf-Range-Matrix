@@ -2,15 +2,20 @@ $ErrorActionPreference = "Stop"
 
 $TaskName = "Golf SIM Control Agent"
 $AgentRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$StartScript = Join-Path $AgentRoot "start-agent.ps1"
+$Pythonw = Join-Path $AgentRoot ".venv\Scripts\pythonw.exe"
+$RunPy = Join-Path $AgentRoot "run.py"
 
-if (-not (Test-Path $StartScript)) {
-    Write-Error "Start script not found: $StartScript"
+if (-not (Test-Path $Pythonw)) {
+    Write-Error "No-console Python not found: $Pythonw. Run the install steps first."
+}
+
+if (-not (Test-Path (Join-Path $AgentRoot "config.yaml"))) {
+    Write-Error "config.yaml not found. Copy config.example.yaml to config.yaml and fill it in first."
 }
 
 $Action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$StartScript`"" `
+    -Execute $Pythonw `
+    -Argument "`"$RunPy`"" `
     -WorkingDirectory $AgentRoot
 
 $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
