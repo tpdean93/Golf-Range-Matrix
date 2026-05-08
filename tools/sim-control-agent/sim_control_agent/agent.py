@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -29,6 +30,17 @@ def _no_window_flags() -> int:
     if os.name != "nt":
         return 0
     return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _acquire_single_instance() -> socket.socket:
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", 47531))
+        lock.listen(1)
+        return lock
+    except OSError as e:
+        lock.close()
+        raise RuntimeError("SIM Control Agent is already running") from e
 
 
 class SimControlAgent:
@@ -463,6 +475,7 @@ class SimControlAgent:
 
 
 def main() -> int:
+    instance_lock = _acquire_single_instance()
     cfg_path = os.environ.get("SIM_CONTROL_CONFIG", "config.yaml")
     cfg = load_config(cfg_path)
     agent = SimControlAgent(cfg)
@@ -475,5 +488,8 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
-    agent.loop_forever()
-    return 0
+    try:
+        agent.loop_forever()
+        return 0
+    finally:
+        instance_lock.close()

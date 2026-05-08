@@ -23,6 +23,7 @@ import logging
 import os
 import queue
 import signal
+import socket
 import sys
 import threading
 import time
@@ -53,6 +54,17 @@ VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".flv")
 
 def _safe_stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _acquire_single_instance() -> socket.socket:
+    lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        lock.bind(("127.0.0.1", 47532))
+        lock.listen(1)
+        return lock
+    except OSError as e:
+        lock.close()
+        raise RuntimeError("Golf Swing Analyzer is already running") from e
 
 
 def _timestamp_from_filename(name: str) -> Optional[datetime]:
@@ -521,6 +533,7 @@ def _summarize_body(body: Dict[str, Any]) -> str:
 
 
 def main() -> int:
+    instance_lock = _acquire_single_instance()
     cfg_path = os.environ.get("ANALYZER_CONFIG", "config.yaml")
     cfg = load_config(cfg_path)
 
@@ -556,8 +569,11 @@ def main() -> int:
         cfg.get("mqtt", {}).get("port"),
         cfg.get("mqtt", {}).get("enable_topic"),
     )
-    app.run(host=host, port=port, threaded=True, use_reloader=False)
-    return 0
+    try:
+        app.run(host=host, port=port, threaded=True, use_reloader=False)
+        return 0
+    finally:
+        instance_lock.close()
 
 
 if __name__ == "__main__":
