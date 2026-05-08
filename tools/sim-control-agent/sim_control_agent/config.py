@@ -36,6 +36,7 @@ DEFAULTS: Dict[str, Any] = {
         },
     },
     "analyzer": {
+        "task_name": "Golf Swing Analyzer",
         "stop_command": "",
         "start_command": "",
         "working_dir": "C:/golf-range-matrix/tools/swing-analyzer",

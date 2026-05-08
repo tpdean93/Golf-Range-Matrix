@@ -309,6 +309,9 @@ class SimControlAgent:
         stop_command = str(self.analyzer_cfg.get("stop_command") or "").strip()
         start_command = str(self.analyzer_cfg.get("start_command") or "").strip()
         cwd = str(self.analyzer_cfg.get("working_dir") or "").strip() or None
+        task_name = str(self.analyzer_cfg.get("task_name") or "").strip()
+        if task_name and not stop_command and not start_command:
+            return self._restart_scheduled_task(task_name)
         if not stop_command and not start_command:
             return {
                 "ok": False,
@@ -319,6 +322,31 @@ class SimControlAgent:
         if start_command:
             self._run_shell(start_command, cwd=cwd, wait=False)
         return {"ok": True, "message": "Swing Analyzer restart command requested"}
+
+    def _restart_scheduled_task(self, task_name: str) -> Dict[str, Any]:
+        command = (
+            f"Stop-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
+            "Start-Sleep -Seconds 1; "
+            f"Start-ScheduledTask -TaskName '{task_name}'"
+        )
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                command,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            creationflags=_no_window_flags(),
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "unknown scheduled task error").strip()
+            return {"ok": False, "message": f"Could not restart {task_name}: {detail[:160]}"}
+        return {"ok": True, "message": f"Restarted scheduled task: {task_name}"}
 
     def _call_obs_request(self, request_name: str, success_message: str) -> Dict[str, Any]:
         try:

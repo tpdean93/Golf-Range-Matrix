@@ -24,8 +24,9 @@ obs:
     timeout_seconds: 8
 
 analyzer:
-  # Optional. Leave blank unless you want the Restart Swing Analyzer button to
-  # run your own local commands.
+  # By default, Restart Swing Analyzer restarts this Windows Scheduled Task.
+  task_name: "Golf Swing Analyzer"
+  # Optional override. Leave blank unless you want custom local commands.
   stop_command: ""
   start_command: ""
   working_dir: "C:/golf-range-matrix/tools/swing-analyzer"
