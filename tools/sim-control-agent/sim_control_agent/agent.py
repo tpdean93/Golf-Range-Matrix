@@ -25,6 +25,12 @@ log = logging.getLogger("sim_control_agent")
 CommandHandler = Callable[[], Dict[str, Any]]
 
 
+def _no_window_flags() -> int:
+    if os.name != "nt":
+        return 0
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 class SimControlAgent:
     def __init__(self, cfg: Dict[str, Any]) -> None:
         self.cfg = cfg
@@ -163,8 +169,9 @@ class SimControlAgent:
             return
         with self._lock:
             payload = dict(self._last_status)
-            payload["obs_running"] = self._is_process_running()
-            scene = self._get_obs_scene()
+            obs_running = self._is_process_running()
+            payload["obs_running"] = obs_running
+            scene = self._get_obs_scene(obs_running=obs_running)
             payload["obs_scene"] = scene
             payload["scene_matches"] = self._scene_matches(scene)
             payload["timestamp"] = self._now()
@@ -187,9 +194,9 @@ class SimControlAgent:
             "last_command": command,
             "last_result": message,
             "obs_running": self._is_process_running(),
-            "obs_scene": self._get_obs_scene(),
             "timestamp": self._now(),
         }
+        status["obs_scene"] = self._get_obs_scene(obs_running=bool(status["obs_running"]))
         status["scene_matches"] = self._scene_matches(status.get("obs_scene"))
         if extra:
             status.update(extra)
@@ -342,8 +349,10 @@ class SimControlAgent:
             timeout=float(ws.get("timeout_seconds", 8)),
         )
 
-    def _get_obs_scene(self) -> Optional[str]:
-        if not self._is_process_running():
+    def _get_obs_scene(self, obs_running: Optional[bool] = None) -> Optional[str]:
+        if obs_running is None:
+            obs_running = self._is_process_running()
+        if not obs_running:
             return None
         try:
             response = self._obs_client().get_current_program_scene()
@@ -398,6 +407,7 @@ class SimControlAgent:
                 check=False,
                 capture_output=True,
                 text=True,
+                creationflags=_no_window_flags(),
             )
             return process_name.lower() in result.stdout.lower()
         result = subprocess.run(
@@ -416,6 +426,7 @@ class SimControlAgent:
                 check=False,
                 capture_output=True,
                 text=True,
+                creationflags=_no_window_flags(),
             )
             return
         subprocess.run(["pkill", "-f", process_name], check=False)
@@ -442,6 +453,7 @@ class SimControlAgent:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
+            creationflags=_no_window_flags(),
         )
         if wait:
             proc.wait(timeout=30)
