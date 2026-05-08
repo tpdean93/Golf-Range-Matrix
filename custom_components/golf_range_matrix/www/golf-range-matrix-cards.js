@@ -303,6 +303,7 @@ class GolfSessionControlCard extends HTMLElement {
   state(entity) { return novaState(this._hass, entity); }
   select(entity, option) { this._hass.callService('select', 'select_option', { entity_id: entity, option }); }
   setShots(entity, value) { this._hass.callService('number', 'set_value', { entity_id: entity, value }); }
+  pressButton(entity) { this._hass.callService('button', 'press', { entity_id: entity }); }
   pill(label, value, icon) {
     return `<div class="stat"><ha-icon icon="${icon}"></ha-icon><div><span>${novaEsc(label)}</span><b>${novaEsc(value ?? '--')}</b></div></div>`;
   }
@@ -319,6 +320,15 @@ class GolfSessionControlCard extends HTMLElement {
     const clubs = novaSortClubs(novaAttrs(this._hass, clubEntity).options || [club].filter(Boolean));
     const count = Number(workflow.bag_test_shot_count || 0);
     const target = Number(workflow.shots_per_club || novaValue(this._hass, shotsEntity) || 5);
+    const simButtons = this.config.sim_buttons || [
+      ['button.golf_sim_control_select_swing_analyzer_scene', 'Scene', 'mdi:view-dashboard'],
+      ['button.golf_sim_control_start_replay_buffer', 'Replay', 'mdi:record-rec'],
+      ['button.golf_sim_control_restart_obs_bridge', 'Restart OBS', 'mdi:restart'],
+    ];
+    const simStatus = novaValue(this._hass, 'sensor.golf_sim_control_status');
+    const obsScene = novaValue(this._hass, 'sensor.golf_sim_control_obs_scene');
+    const sceneMatches = novaValue(this._hass, 'sensor.golf_sim_control_scene_matches') === 'True';
+    const simOnline = simStatus && !['unknown', 'unavailable'].includes(String(simStatus).toLowerCase());
     this.innerHTML = `<ha-card><div class="panel">
       <div class="head"><div><div class="kicker">Practice Control</div><div class="title">Session Controls</div></div><div class="live ${recording ? 'on' : ''}"><span></span>${recording ? 'Recording' : 'Not Recording'}</div></div>
       <div class="stats">
@@ -337,9 +347,20 @@ class GolfSessionControlCard extends HTMLElement {
         <button class="action danger" data-action="discard"><ha-icon icon="mdi:delete-restore"></ha-icon>Discard</button>
         <button class="action" data-action="stop"><ha-icon icon="mdi:stop-circle"></ha-icon>Stop</button>
       </div>
+      <div class="sectionLabel">SIM Control</div>
+      <div class="simbar">
+        <div class="simstatus ${sceneMatches ? 'ok' : ''}"><span></span>${simOnline ? `OBS: ${novaEsc(obsScene || 'unknown')}` : 'SIM agent offline'}</div>
+        <div class="simactions">
+          ${simButtons.map(([entity, label, icon]) => {
+            const state = novaValue(this._hass, entity);
+            const disabled = !state || ['unknown', 'unavailable'].includes(String(state).toLowerCase());
+            return `<button class="action sim ${disabled ? 'disabled' : ''}" data-button="${novaEsc(entity)}" ${disabled ? 'disabled' : ''}><ha-icon icon="${novaEsc(icon)}"></ha-icon>${novaEsc(label)}</button>`;
+          }).join('')}
+        </div>
+      </div>
       <div class="stepper"><button data-step="-1">-</button><span>${target} shots per club</span><button data-step="1">+</button></div>
     </div></ha-card><style>
-      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-30% auto auto 30%;width:360px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.22),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px}.kicker,.sectionLabel{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.live{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.08);font-weight:900;color:rgba(255,255,255,.7)}.live span{width:9px;height:9px;border-radius:50%;background:#ff5d7a;box-shadow:0 0 12px #ff5d7a}.live.on span{background:#72ff7d;box-shadow:0 0 12px #72ff7d}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.stat{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:center;padding:12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.stat ha-icon{color:#8ffcff}.stat span{display:block;color:rgba(255,255,255,.55);font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:900}.stat b{display:block;margin-top:4px;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.chip,.action,.stepper button{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:900}.chip{padding:8px 11px}.chip.on{background:rgba(247,255,92,.16);border-color:rgba(247,255,92,.42);color:#f7ff8a}.actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}.action{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border-radius:18px}.action ha-icon{color:#8ffcff}.action.primary{background:rgba(56,248,255,.12);border-color:rgba(56,248,255,.35)}.action.danger ha-icon{color:#ff8aa1}.stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding:10px 12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11);font-weight:900}.stepper button{width:34px;height:30px;color:#f7ff8a}@media(max-width:760px){.stats{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      ha-card{border:0;border-radius:26px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-30% auto auto 30%;width:360px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.22),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px}.kicker,.sectionLabel{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:24px;font-weight:950;letter-spacing:-.05em}.live{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.08);font-weight:900;color:rgba(255,255,255,.7)}.live span{width:9px;height:9px;border-radius:50%;background:#ff5d7a;box-shadow:0 0 12px #ff5d7a}.live.on span,.simstatus.ok span{background:#72ff7d;box-shadow:0 0 12px #72ff7d}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.stat{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:center;padding:12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11)}.stat ha-icon{color:#8ffcff}.stat span{display:block;color:rgba(255,255,255,.55);font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:900}.stat b{display:block;margin-top:4px;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.chip,.action,.stepper button{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:white;border-radius:999px;font-weight:900}.chip{padding:8px 11px}.chip.on{background:rgba(247,255,92,.16);border-color:rgba(247,255,92,.42);color:#f7ff8a}.actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}.action{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border-radius:18px}.action ha-icon{color:#8ffcff}.action.primary{background:rgba(56,248,255,.12);border-color:rgba(56,248,255,.35)}.action.danger ha-icon{color:#ff8aa1}.simbar{display:grid;grid-template-columns:1fr 2fr;gap:10px;align-items:stretch;margin-top:8px}.simstatus{display:flex;align-items:center;gap:9px;padding:12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11);color:rgba(255,255,255,.76);font-weight:900;min-width:0}.simstatus span{width:9px;height:9px;border-radius:50%;background:#ff5d7a;box-shadow:0 0 12px #ff5d7a;flex:0 0 auto}.simactions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.action.sim{padding:10px 8px;background:rgba(56,248,255,.09);border-color:rgba(56,248,255,.25)}.action.disabled{opacity:.45;cursor:not-allowed}.stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding:10px 12px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.11);font-weight:900}.stepper button{width:34px;height:30px;color:#f7ff8a}@media(max-width:760px){.stats{grid-template-columns:1fr}.actions,.simactions{grid-template-columns:repeat(2,minmax(0,1fr))}.simbar{grid-template-columns:1fr}}
     </style>`;
     this.querySelectorAll('[data-player]').forEach(b => b.addEventListener('click', () => this.select(playerEntity, b.dataset.player)));
     this.querySelectorAll('[data-club]').forEach(b => b.addEventListener('click', () => this.select(clubEntity, b.dataset.club)));
@@ -347,6 +368,7 @@ class GolfSessionControlCard extends HTMLElement {
     this.querySelector('[data-action="bag"]')?.addEventListener('click', () => novaCall(this._hass, 'start_bag_test'));
     this.querySelector('[data-action="discard"]')?.addEventListener('click', () => novaCall(this._hass, 'discard_last_shot'));
     this.querySelector('[data-action="stop"]')?.addEventListener('click', () => novaCall(this._hass, 'stop_session'));
+    this.querySelectorAll('[data-button]').forEach(b => b.addEventListener('click', () => this.pressButton(b.dataset.button)));
     this.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => this.setShots(shotsEntity, Math.max(1, Math.min(20, target + Number(b.dataset.step))))));
   }
 }
