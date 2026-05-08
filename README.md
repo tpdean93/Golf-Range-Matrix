@@ -49,7 +49,7 @@ At a high level, the working setup is:
 
 ## SIM Control Agent
 
-The optional SIM Control Agent lives in `tools/sim-control-agent/`. It runs on the sim PC and publishes Home Assistant MQTT discovery for recovery buttons such as Restart OBS Bridge, Start Replay Buffer, Save Replay Buffer, and Restart Swing Analyzer.
+The optional SIM Control Agent lives in `tools/sim-control-agent/`. It runs on the sim PC and publishes Home Assistant MQTT discovery for recovery buttons such as Restart OBS Bridge, Select Swing Analyzer Scene, Start Replay Buffer, Save Replay Buffer, and Restart Swing Analyzer.
 
 Use it when OBS or the Open Golf Coach script stops pushing shots after launching GSPro or changing simulator state. The agent listens on fixed MQTT commands only; it does not run arbitrary shell payloads from Home Assistant. See `tools/sim-control-agent/README.md` for setup.
 

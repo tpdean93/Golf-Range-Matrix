@@ -88,6 +88,7 @@ Supported command payloads:
 
 - `restart_obs`
 - `start_obs`
+- `select_swing_analyzer_scene`
 - `start_replay_buffer`
 - `save_replay_buffer`
 - `restart_analyzer`
@@ -95,7 +96,7 @@ Supported command payloads:
 The SIM Control Agent publishes:
 
 - `golf/sim/control/availability`: retained `online`/`offline`.
-- `golf/sim/control/status`: retained JSON with `ok`, `last_command`, `last_result`, `obs_running`, and `timestamp`.
+- `golf/sim/control/status`: retained JSON with `ok`, `last_command`, `last_result`, `obs_running`, `obs_scene`, `scene_matches`, and `timestamp`.
 - Home Assistant MQTT discovery configs under `homeassistant/button/golf_sim_control/<id>/config` and `homeassistant/sensor/golf_sim_control/<id>/config`.
 
 The command topic intentionally accepts only known command names. It does not execute arbitrary shell commands from MQTT.

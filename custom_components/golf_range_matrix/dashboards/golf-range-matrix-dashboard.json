@@ -157,12 +157,15 @@
               "entities": [
                 "button.golf_sim_control_restart_obs_bridge",
                 "button.golf_sim_control_start_obs",
+                "button.golf_sim_control_select_swing_analyzer_scene",
                 "button.golf_sim_control_start_replay_buffer",
                 "button.golf_sim_control_save_replay_buffer",
                 "button.golf_sim_control_restart_swing_analyzer",
                 "sensor.golf_sim_control_status",
                 "sensor.golf_sim_control_last_result",
-                "sensor.golf_sim_control_obs_running"
+                "sensor.golf_sim_control_obs_running",
+                "sensor.golf_sim_control_obs_scene",
+                "sensor.golf_sim_control_scene_matches"
               ]
             }
           ]

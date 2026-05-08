@@ -38,11 +38,14 @@ class SimControlAgent:
             "last_command": None,
             "last_result": "starting",
             "obs_running": self._is_process_running(),
+            "obs_scene": None,
+            "scene_matches": None,
             "timestamp": self._now(),
         }
         self.handlers: Dict[str, CommandHandler] = {
             "restart_obs": self.restart_obs,
             "start_obs": self.start_obs,
+            "select_swing_analyzer_scene": self.select_swing_analyzer_scene,
             "start_replay_buffer": self.start_replay_buffer,
             "save_replay_buffer": self.save_replay_buffer,
             "restart_analyzer": self.restart_analyzer,
@@ -161,6 +164,9 @@ class SimControlAgent:
         with self._lock:
             payload = dict(self._last_status)
             payload["obs_running"] = self._is_process_running()
+            scene = self._get_obs_scene()
+            payload["obs_scene"] = scene
+            payload["scene_matches"] = self._scene_matches(scene)
             payload["timestamp"] = self._now()
             self._last_status = payload
         self._client.publish(
@@ -181,8 +187,10 @@ class SimControlAgent:
             "last_command": command,
             "last_result": message,
             "obs_running": self._is_process_running(),
+            "obs_scene": self._get_obs_scene(),
             "timestamp": self._now(),
         }
+        status["scene_matches"] = self._scene_matches(status.get("obs_scene"))
         if extra:
             status.update(extra)
         with self._lock:
@@ -210,6 +218,7 @@ class SimControlAgent:
         buttons = [
             ("restart_obs_bridge", "Restart OBS Bridge", "restart_obs", "mdi:restart"),
             ("start_obs", "Start OBS", "start_obs", "mdi:video"),
+            ("select_swing_analyzer_scene", "Select Swing Analyzer Scene", "select_swing_analyzer_scene", "mdi:view-dashboard"),
             ("start_replay_buffer", "Start Replay Buffer", "start_replay_buffer", "mdi:record-rec"),
             ("save_replay_buffer", "Save Replay Buffer", "save_replay_buffer", "mdi:content-save"),
             ("restart_swing_analyzer", "Restart Swing Analyzer", "restart_analyzer", "mdi:motion-play"),
@@ -235,6 +244,8 @@ class SimControlAgent:
             ("last_command", "SIM Control Last Command", "{{ value_json.last_command }}"),
             ("last_result", "SIM Control Last Result", "{{ value_json.last_result }}"),
             ("obs_running", "SIM Control OBS Running", "{{ value_json.obs_running }}"),
+            ("obs_scene", "SIM Control OBS Scene", "{{ value_json.obs_scene }}"),
+            ("scene_matches", "SIM Control Scene Matches", "{{ value_json.scene_matches }}"),
         ]
         for object_id, name, tpl in sensors:
             config = {
@@ -262,6 +273,12 @@ class SimControlAgent:
             return {"ok": True, "message": "OBS already running"}
         self._start_obs()
         return {"ok": True, "message": "OBS start requested"}
+
+    def select_swing_analyzer_scene(self) -> Dict[str, Any]:
+        scene = str(self.obs_cfg.get("swing_analyzer_scene") or "").strip()
+        if not scene:
+            return {"ok": False, "message": "obs.swing_analyzer_scene is not configured"}
+        return self._set_obs_scene(scene)
 
     def start_replay_buffer(self) -> Dict[str, Any]:
         return self._call_obs_request("StartReplayBuffer", "Replay buffer start requested")
@@ -310,6 +327,68 @@ class SimControlAgent:
             return {"ok": False, "message": f"OBS request not supported: {request_name}"}
         method()
         return {"ok": True, "message": success_message}
+
+    def _obs_client(self):
+        try:
+            from obsws_python import ReqClient
+        except ImportError as e:
+            raise RuntimeError("obsws-python not installed; pip install -r requirements.txt") from e
+
+        ws = self.obs_cfg.get("websocket", {})
+        return ReqClient(
+            host=ws.get("host", "127.0.0.1"),
+            port=int(ws.get("port", 4455)),
+            password=ws.get("password") or "",
+            timeout=float(ws.get("timeout_seconds", 8)),
+        )
+
+    def _get_obs_scene(self) -> Optional[str]:
+        if not self._is_process_running():
+            return None
+        try:
+            response = self._obs_client().get_current_program_scene()
+        except Exception as e:
+            log.debug("Could not read OBS current scene: %s", e)
+            return None
+        for attr in ("current_program_scene_name", "currentProgramSceneName", "scene_name", "sceneName"):
+            value = getattr(response, attr, None)
+            if value:
+                return str(value)
+        if isinstance(response, dict):
+            for key in ("currentProgramSceneName", "current_program_scene_name", "sceneName", "scene_name"):
+                value = response.get(key)
+                if value:
+                    return str(value)
+        return None
+
+    def _set_obs_scene(self, scene: str) -> Dict[str, Any]:
+        client = self._obs_client()
+        setter = getattr(client, "set_current_program_scene", None)
+        if setter is None:
+            return {"ok": False, "message": "OBS scene switching is not supported"}
+        errors = []
+        for args, kwargs in (
+            ((scene,), {}),
+            ((), {"sceneName": scene}),
+            ((), {"scene_name": scene}),
+        ):
+            try:
+                setter(*args, **kwargs)
+                return {
+                    "ok": True,
+                    "message": f"OBS scene selected: {scene}",
+                    "obs_scene": scene,
+                    "scene_matches": True,
+                }
+            except Exception as e:
+                errors.append(str(e))
+        return {"ok": False, "message": f"Could not select OBS scene {scene}: {errors[-1]}"}
+
+    def _scene_matches(self, scene: object) -> Optional[bool]:
+        required = str(self.obs_cfg.get("swing_analyzer_scene") or "").strip()
+        if not required or not scene:
+            return None
+        return str(scene).strip().casefold() == required.casefold()
 
     def _is_process_running(self) -> bool:
         process_name = str(self.obs_cfg.get("process_name") or "obs64.exe")

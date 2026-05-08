@@ -27,6 +27,7 @@ DEFAULTS: Dict[str, Any] = {
         "exe_path": "C:/Program Files/obs-studio/bin/64bit/obs64.exe",
         "working_dir": "C:/Program Files/obs-studio/bin/64bit",
         "restart_wait_seconds": 4,
+        "swing_analyzer_scene": "Swing Analyzer",
         "websocket": {
             "host": "127.0.0.1",
             "port": 4455,
