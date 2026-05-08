@@ -24,7 +24,7 @@ py -3.12 -m venv .venv
 pip install -r requirements.txt
 Copy-Item config.example.yaml config.yaml
 notepad config.yaml
-python run.py
+.\start-agent.ps1
 ```
 
 Set `mqtt.host`, `mqtt.username`, and `mqtt.password` to the same broker/user used by the Swing Analyzer. Set `obs.websocket.password` if OBS WebSocket requires one.
@@ -53,6 +53,29 @@ When the agent connects, MQTT discovery creates a device named `Golf SIM Control
 
 Entity IDs may vary slightly depending on Home Assistant naming.
 
+## Start Automatically
+
+After the agent works manually, install the startup task:
+
+```powershell
+cd C:\golf-range-matrix\tools\sim-control-agent
+.\install-startup-task.ps1
+```
+
+That creates a Windows Scheduled Task named `Golf SIM Control Agent`, starts it immediately, and starts it again whenever you log into the SIM PC.
+
+To remove the task:
+
+```powershell
+.\uninstall-startup-task.ps1
+```
+
+For a manual one-click start, right-click `start-agent.ps1` and choose `Run with PowerShell`, or create a desktop shortcut to:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\golf-range-matrix\tools\sim-control-agent\start-agent.ps1"
+```
+
 ## MQTT Topics
 
 Default topics:
@@ -76,4 +99,4 @@ Restarting OBS is intentionally blunt because OBS does not expose a reliable Web
 
 Use `Select Swing Analyzer Scene` before practice if GSPro or OBS scene changes leave the wrong scene active. `sensor.golf_sim_control_scene_matches` reports whether the current OBS scene matches `obs.swing_analyzer_scene`.
 
-For automatic startup, create a Windows Scheduled Task that runs `python run.py` at logon from this folder.
+Use `install-startup-task.ps1` for automatic startup instead of manually navigating to this folder after every reboot.
