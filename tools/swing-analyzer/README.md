@@ -141,7 +141,7 @@ If the dashboard browser is not on the sim PC, allow inbound TCP `8765` through 
 ```powershell
 cd C:\golf-range-matrix\tools\swing-analyzer
 .\.venv\Scripts\Activate.ps1
-python run.py
+.\start-agent.ps1
 ```
 
 You should see:
@@ -151,6 +151,19 @@ HTTP server on http://0.0.0.0:8765
 Watching: C:\golf_swings\raw
 Connected to OBS at 127.0.0.1:4455
 MQTT subscribed to shot=golf/shot/raw context=golf/context/current enable=golf/swing/analyzer/enabled
+```
+
+To start the analyzer automatically at Windows logon:
+
+```powershell
+cd C:\golf-range-matrix\tools\swing-analyzer
+.\install-startup-task.ps1
+```
+
+That creates a hidden Windows Scheduled Task named `Golf Swing Analyzer`. To remove it:
+
+```powershell
+.\uninstall-startup-task.ps1
 ```
 
 ### 7. Home Assistant side
@@ -188,7 +201,7 @@ Range Matrix also publishes retained context to `golf/context/current` whenever 
 5. OBS: enable and start Replay Buffer, set raw recording path to the analyzer `paths.raw_video_dir`, and enable OBS WebSocket.
 6. Sim PC: create the Python venv, install `requirements.txt`, copy `config.example.yaml` to `config.yaml`, and fill in MQTT, OBS, server, and camera settings.
 7. Sim PC: allow inbound TCP `8765` in Windows Firewall.
-8. Sim PC: run `python run.py` and confirm the MQTT subscription log line.
+8. Sim PC: run `.\start-agent.ps1` or install `.\install-startup-task.ps1` and confirm the MQTT subscription log line.
 9. Home Assistant: turn on the Swing Analyzer switch.
 10. Hit a shot. Within about 30 seconds the latest swing sensors should update and the dashboard video should loop the annotated MP4.
 

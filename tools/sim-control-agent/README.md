@@ -62,7 +62,7 @@ cd C:\golf-range-matrix\tools\sim-control-agent
 .\install-startup-task.ps1
 ```
 
-That creates a Windows Scheduled Task named `Golf SIM Control Agent`, starts it immediately, and starts it again whenever you log into the SIM PC.
+That creates a hidden Windows Scheduled Task named `Golf SIM Control Agent`, starts it immediately, and starts it again whenever you log into the SIM PC.
 
 To remove the task:
 

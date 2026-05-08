@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$TaskName = "Golf SIM Control Agent"
+$TaskName = "Golf Swing Analyzer"
 $AgentRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $StartScript = Join-Path $AgentRoot "start-agent.ps1"
 
@@ -26,10 +26,10 @@ Register-ScheduledTask `
     -Action $Action `
     -Trigger $Trigger `
     -Settings $Settings `
-    -Description "Starts the Golf SIM Control Agent for Home Assistant MQTT recovery buttons." `
+    -Description "Starts the Golf Swing Analyzer for MQTT-driven OBS replay analysis." `
     -Force | Out-Null
 
 Write-Host "Installed scheduled task: $TaskName"
 Write-Host "Starting it now..."
 Start-ScheduledTask -TaskName $TaskName
-Write-Host "Done. Check Task Scheduler or Home Assistant MQTT device status to confirm it is online."
+Write-Host "Done. Check Task Scheduler or the Golf Swing Analyzer MQTT device status to confirm it is online."
