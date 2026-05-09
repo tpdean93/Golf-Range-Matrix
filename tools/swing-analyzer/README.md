@@ -190,6 +190,44 @@ Add the `ha_dashboard_swing.yaml` view to the Range Matrix dashboard, or use the
 
 Range Matrix also publishes retained context to `golf/context/current` whenever the selected player, club, recording state, or workflow changes. The analyzer applies that context before saving shot JSON, so the annotated overlay and MQTT sensors use the club selected in the dashboard.
 
+### 8. (Optional) Archive annotated clips into Home Assistant
+
+The Flask server on TCP `8765` only works on the home network. To make the Last Swing card load over Nabu Casa as well, copy each new annotated MP4 into a folder Home Assistant serves, and publish a Home Assistant URL for it.
+
+One-time setup on Home Assistant OS:
+
+1. Settings -> Add-ons -> Add-on Store -> install and start `Samba share`.
+2. Set a username and password and start it.
+3. From the sim PC, confirm `\\homeassistant\config` and `\\homeassistant\media` are reachable in Explorer.
+4. Create the destination folders once:
+   - `\\homeassistant\config\www\golf_replays`
+   - `\\homeassistant\media\golf_replays`
+
+In `config.yaml`:
+
+```yaml
+archive:
+  enabled: true
+  keep_last: 5
+  filename_template: "swing_{timestamp}_{original}"
+  destinations:
+    # Served at /local/golf_replays/<file>. The custom card uses this URL.
+    - path: '\\homeassistant\config\www\golf_replays'
+      public_url_prefix: "/local/golf_replays"
+    # Browsable in HA Media Browser; also reachable via Nabu Casa.
+    - path: '\\homeassistant\media\golf_replays'
+```
+
+After each successful annotation, the analyzer copies the rendered MP4 into every destination, prunes each folder to `keep_last`, and (when a destination defines `public_url_prefix`) publishes `annotated_url` as that public URL instead of the local Flask URL. The `/local/...` URL is served by HA itself, so the dashboard works on the LAN and through Nabu Casa with no auth tokens or media-source plumbing.
+
+The copy lands as `*.part` first and is then renamed, so HA's Media Browser never sees a half-written clip.
+
+If the agent runs as a Windows scheduled task, mapped drives may not be visible in some sessions; UNC paths above are recommended. If you must persist credentials for the task user, run once as that user:
+
+```powershell
+cmdkey /add:homeassistant /user:<samba-user> /pass:<samba-password>
+```
+
 ---
 
 ## End-to-end Setup Checklist

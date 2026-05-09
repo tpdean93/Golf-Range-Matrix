@@ -30,25 +30,3 @@ analyzer:
   stop_command: ""
   start_command: ""
   working_dir: "C:/golf-range-matrix/tools/swing-analyzer"
-
-# Optional: after each successful Save Replay Buffer, copy the saved clip to
-# a folder Home Assistant exposes via Media Browser. Anything HA shows in
-# Media Browser is reachable through Nabu Casa, so the latest replay stays
-# playable even when you are not on the home network.
-#
-# Recommended setup with Home Assistant OS:
-#   1. Install the official "Samba share" add-on in HA and start it.
-#   2. From the SIM PC, open Windows Explorer and confirm
-#      \\homeassistant\media is reachable. (Map it as a drive if you want,
-#      but UNC paths are more reliable when the agent runs as a scheduled
-#      task. If you use a mapped drive, run cmdkey for the agent's user so
-#      the credential persists.)
-#   3. Create the destination folder once: \\homeassistant\media\golf_replays
-#
-# keep_last is the number of clips to retain in the destination folder.
-# Older clips beyond keep_last are deleted right after each successful save.
-archive:
-  enabled: false
-  destination: '\\homeassistant\media\golf_replays'
-  keep_last: 5
-  filename_template: "swing_{timestamp}_{original}"

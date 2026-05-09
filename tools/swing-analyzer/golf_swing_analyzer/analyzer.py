@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import queue
+import shutil
 import signal
 import socket
 import sys
@@ -310,6 +311,13 @@ class Analyzer:
         )
         raw_url = f"{public}/videos/raw/{video_path.name}" if public else None
 
+        if annotated_ok:
+            override_url, archive_messages = self._archive_annotated(annotated_path)
+            for m in archive_messages:
+                log.info(m)
+            if override_url:
+                annotated_url = override_url
+
         analysis: Dict[str, Any] = {
             "id": stamp,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -395,6 +403,102 @@ class Analyzer:
             return start_src, end_src
         except Exception:
             return None, None
+
+    # ---------- Archive ----------
+    def _archive_annotated(
+        self,
+        annotated_path: Path,
+    ) -> Tuple[Optional[str], List[str]]:
+        """Copy the annotated MP4 into each configured destination and prune.
+
+        Returns (override_annotated_url, log_messages). override_annotated_url
+        comes from the first destination that defines public_url_prefix; if
+        set, it is published in the analysis JSON in place of the local
+        Flask server URL so the HA dashboard works locally and via Nabu Casa.
+        """
+        archive_cfg = self.cfg.get("archive", {}) or {}
+        if not archive_cfg.get("enabled"):
+            return None, []
+        destinations = archive_cfg.get("destinations") or []
+        if not destinations:
+            return None, []
+        if not annotated_path.exists():
+            return None, [f"archive skipped: source {annotated_path} not found"]
+
+        keep = int(archive_cfg.get("keep_last") or 5)
+        template = str(
+            archive_cfg.get("filename_template") or "swing_{timestamp}_{original}"
+        )
+        timestamp = time.strftime(
+            "%Y%m%d_%H%M%S", time.localtime(annotated_path.stat().st_mtime)
+        )
+        target_name = template.format(
+            timestamp=timestamp, original=annotated_path.name
+        )
+
+        override_url: Optional[str] = None
+        messages: List[str] = []
+        for dest in destinations:
+            if not isinstance(dest, dict):
+                continue
+            path_raw = str(dest.get("path") or "").strip()
+            if not path_raw:
+                continue
+            dest_dir = Path(path_raw)
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                messages.append(f"archive {path_raw}: open failed: {e}")
+                continue
+
+            target = dest_dir / target_name
+            tmp = target.with_suffix(target.suffix + ".part")
+            try:
+                shutil.copy2(annotated_path, tmp)
+                os.replace(tmp, target)
+            except Exception as e:
+                try:
+                    if tmp.exists():
+                        tmp.unlink()
+                except Exception:
+                    pass
+                messages.append(f"archive {path_raw}: copy failed: {e}")
+                continue
+
+            kept = self._prune_archive(dest_dir, keep)
+            messages.append(
+                f"archive {path_raw}: copied {target.name} (kept {kept})"
+            )
+
+            prefix = str(dest.get("public_url_prefix") or "").strip()
+            if prefix and override_url is None:
+                override_url = f"{prefix.rstrip('/')}/{target.name}"
+
+        return override_url, messages
+
+    def _prune_archive(self, folder: Path, keep: int) -> int:
+        if keep <= 0:
+            return 0
+        extensions = {".mp4", ".mkv", ".mov", ".flv", ".ts"}
+        try:
+            clips = sorted(
+                (
+                    p
+                    for p in folder.iterdir()
+                    if p.is_file() and p.suffix.lower() in extensions
+                ),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        except Exception as e:
+            log.warning("Could not enumerate %s: %s", folder, e)
+            return 0
+        for old in clips[keep:]:
+            try:
+                old.unlink()
+            except OSError as e:
+                log.warning("Could not remove old clip %s: %s", old, e)
+        return min(len(clips), keep)
 
     # ---------- Retention ----------
     def _enforce_retention(self) -> List[Dict[str, Any]]:

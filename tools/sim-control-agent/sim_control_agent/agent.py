@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 import signal
 import socket
 import subprocess
@@ -13,7 +12,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 
 from .config import load_config
 
@@ -330,8 +329,6 @@ class SimControlAgent:
         if self._is_replay_buffer_active(client) is False:
             return {"ok": False, "message": "Replay buffer is not running"}
 
-        previous_path = self._read_last_replay_path(client)
-
         try:
             client.save_replay_buffer()
         except Exception as e:
@@ -342,28 +339,7 @@ class SimControlAgent:
                 "ok": False,
                 "message": f"Request SaveReplayBuffer returned {code or 'error'}: {e}",
             }
-
-        new_path = self._wait_for_new_replay(client, previous=previous_path)
-        if not new_path:
-            return {"ok": True, "message": "Replay buffer save requested"}
-
-        archived_name, kept, skip_reason = self._archive_replay(Path(new_path))
-        if archived_name:
-            return {
-                "ok": True,
-                "message": (
-                    f"Saved {Path(new_path).name} -> HA media as {archived_name} "
-                    f"(kept {kept})"
-                ),
-            }
-        if skip_reason:
-            return {
-                "ok": True,
-                "message": (
-                    f"Saved {Path(new_path).name}; archive skipped: {skip_reason}"
-                ),
-            }
-        return {"ok": True, "message": f"Saved {Path(new_path).name}"}
+        return {"ok": True, "message": "Replay buffer save requested"}
 
     def restart_analyzer(self) -> Dict[str, Any]:
         stop_command = str(self.analyzer_cfg.get("stop_command") or "").strip()
@@ -418,93 +394,6 @@ class SimControlAgent:
         if value is None:
             return None
         return bool(value)
-
-    def _read_last_replay_path(self, client) -> Optional[str]:
-        try:
-            response = client.get_last_replay_buffer_replay()
-        except Exception as e:
-            log.debug("GetLastReplayBufferReplay failed: %s", e)
-            return None
-        return self._read_attr(response, "saved_replay_path", "savedReplayPath")
-
-    def _wait_for_new_replay(
-        self,
-        client,
-        previous: Optional[str],
-        attempts: int = 12,
-        delay: float = 0.5,
-    ) -> Optional[str]:
-        for _ in range(attempts):
-            path = self._read_last_replay_path(client)
-            if path and path != previous and Path(path).exists():
-                return path
-            time.sleep(delay)
-        return None
-
-    def _archive_replay(self, source: Path) -> Tuple[Optional[str], int, Optional[str]]:
-        archive_cfg = self.cfg.get("archive", {}) or {}
-        if not archive_cfg.get("enabled"):
-            return None, 0, None
-        dest_dir_raw = str(archive_cfg.get("destination") or "").strip()
-        if not dest_dir_raw:
-            return None, 0, "destination not configured"
-        keep = int(archive_cfg.get("keep_last") or 5)
-        template = str(
-            archive_cfg.get("filename_template") or "swing_{timestamp}_{original}"
-        )
-
-        if not source.exists():
-            return None, 0, f"source not found: {source}"
-
-        dest_dir = Path(dest_dir_raw)
-        try:
-            dest_dir.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            return None, 0, f"could not open {dest_dir}: {e}"
-
-        timestamp = time.strftime(
-            "%Y%m%d_%H%M%S", time.localtime(source.stat().st_mtime)
-        )
-        target_name = template.format(timestamp=timestamp, original=source.name)
-        target = dest_dir / target_name
-        tmp = target.with_suffix(target.suffix + ".part")
-        try:
-            shutil.copy2(source, tmp)
-            os.replace(tmp, target)
-        except Exception as e:
-            try:
-                if tmp.exists():
-                    tmp.unlink()
-            except Exception:
-                pass
-            return None, 0, f"copy failed: {e}"
-
-        kept = self._prune_archive(dest_dir, keep)
-        return target.name, kept, None
-
-    def _prune_archive(self, folder: Path, keep: int) -> int:
-        if keep <= 0:
-            return 0
-        extensions = {".mp4", ".mkv", ".mov", ".flv", ".ts"}
-        try:
-            clips = sorted(
-                (
-                    p
-                    for p in folder.iterdir()
-                    if p.is_file() and p.suffix.lower() in extensions
-                ),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-        except Exception as e:
-            log.warning("Could not enumerate archive %s: %s", folder, e)
-            return 0
-        for old in clips[keep:]:
-            try:
-                old.unlink()
-            except OSError as e:
-                log.warning("Could not remove old replay %s: %s", old, e)
-        return min(len(clips), keep)
 
     @staticmethod
     def _read_attr(response: Any, *names: str) -> Any:

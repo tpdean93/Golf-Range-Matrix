@@ -103,38 +103,4 @@ Use `Select Swing Analyzer Scene` before practice if GSPro or OBS scene changes 
 
 Use `install-startup-task.ps1` for automatic startup instead of manually navigating to this folder after every reboot.
 
-## Archive Saved Replays To Home Assistant
-
-When `archive.enabled: true`, every successful `save_replay_buffer` copies the new clip to a folder Home Assistant exposes through Media Browser. Anything in HA's Media Browser is reachable through Nabu Casa, so the latest replays stay playable when you are off your home Wi-Fi.
-
-### One-time setup on Home Assistant OS
-
-1. Settings -> Add-ons -> Add-on Store -> install and start `Samba share`.
-2. In the add-on, set a username/password and start it.
-3. From the SIM PC, confirm `\\homeassistant\media` is reachable in Explorer.
-4. Create `\\homeassistant\media\golf_replays` once.
-
-### Configure the agent
-
-```yaml
-archive:
-  enabled: true
-  destination: '\\homeassistant\media\golf_replays'
-  keep_last: 5
-  filename_template: "swing_{timestamp}_{original}"
-```
-
-Forward slashes work too (e.g. `H:/golf_replays`). UNC is recommended over a mapped drive because the agent runs as a scheduled task and mapped drives may not be visible in some sessions. If you must use credentials, run once on the SIM PC as the same user the task uses:
-
-```powershell
-cmdkey /add:homeassistant /user:<samba-user> /pass:<samba-password>
-```
-
-### What the agent does after each save
-
-1. Calls `SaveReplayBuffer` and waits up to a few seconds for OBS to write the file.
-2. Reads the saved path from `GetLastReplayBufferReplay`.
-3. Copies the file into the destination folder using `swing_<timestamp>_<original>`. The copy lands as `*.part` first, then renames to its final name, so HA never sees a half-written clip.
-4. Sorts the destination folder by modified time and deletes anything beyond `keep_last`.
-
-`sensor.golf_sim_control_last_result` reports the archive outcome (e.g. `Saved 2026-05-08 19-10-12.mp4 -> HA media as swing_20260508_191012_2026-05-08 19-10-12.mp4 (kept 5)`). If the share is unreachable, the agent still reports OK on the save itself but includes `archive skipped: ...` in the message.
+> Looking for a way to expose annotated swing clips in the HA dashboard remotely? That belongs in the Swing Analyzer service, which already produces the annotated MP4. See `tools/swing-analyzer/README.md` (`Archive annotated clips into Home Assistant`). The Save Replay Buffer button here only fires the OBS WebSocket request — it does not archive the raw clip on its own.

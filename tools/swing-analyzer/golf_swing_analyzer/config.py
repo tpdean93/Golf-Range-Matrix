@@ -70,6 +70,12 @@ DEFAULTS: Dict[str, Any] = {
         "model": "trinity",
         "timeout_seconds": 60,
     },
+    "archive": {
+        "enabled": False,
+        "keep_last": 5,
+        "filename_template": "swing_{timestamp}_{original}",
+        "destinations": [],
+    },
 }
 
 
