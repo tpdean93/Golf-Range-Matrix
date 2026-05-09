@@ -300,6 +300,9 @@ class Analyzer:
                     self.cfg.get("annotation", {}).get("slow_motion_factor", 1.0)
                 ),
                 overlay_options=self.cfg.get("annotation", {}).get("overlays", {}),
+                side_by_side=bool(
+                    self.cfg.get("annotation", {}).get("side_by_side", True)
+                ),
             )
         except Exception as e:
             log.exception("Annotation failed: %s", e)
@@ -376,7 +379,7 @@ class Analyzer:
         fps: float,
     ) -> tuple[Optional[int], Optional[int]]:
         """Translate sampled-frame phase indices into a source-video frame
-        window of roughly [address - 0.3s, impact + 1.0s], clamped to the
+        window of roughly [address - 0.5s, impact + 2.5s], clamped to the
         actual swing motion. Returns (start, end) in source-frame coords,
         or (None, None) if we can't bound it (annotator will use full clip).
         """
@@ -385,7 +388,7 @@ class Analyzer:
         try:
             fps_eff = float(fps) if fps > 0 else 30.0
             pre_pad = int(0.5 * fps_eff)
-            post_pad = int(1.5 * fps_eff)
+            post_pad = int(2.5 * fps_eff)
 
             start_idx = phases.address_idx if phases.address_idx is not None else 0
             end_idx = (

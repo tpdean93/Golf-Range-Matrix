@@ -121,6 +121,7 @@ def annotate_video(
     clip_end_frame: Optional[int] = None,
     slow_motion_factor: float = 1.0,
     overlay_options: Optional[Dict[str, object]] = None,
+    side_by_side: bool = True,
 ) -> bool:
     import cv2
 
@@ -147,7 +148,8 @@ def annotate_video(
     temp_path = out.with_name(out.stem + "__tmp_mp4v.mp4")
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (width, height))
+    out_width = width * 2 if side_by_side else width
+    writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (out_width, height))
 
     pose_by_idx: Dict[int, FramePose] = {f.frame_index: f for f in frames}
     last_pose: Optional[FramePose] = None
@@ -180,6 +182,9 @@ def annotate_video(
                 break
             if idx < clip_start_frame:
                 continue
+
+            raw_panel = frame.copy() if side_by_side else None
+
             pose = pose_by_idx.get(idx, last_pose)
             if pose is not None:
                 last_pose = pose
@@ -197,7 +202,14 @@ def annotate_video(
                 nova,
                 faults,
             )
-            writer.write(frame)
+
+            if side_by_side and raw_panel is not None:
+                _draw_panel_label(raw_panel, "RAW", "right")
+                _draw_panel_label(frame, "ANALYZED", "right")
+                composite = cv2.hconcat([raw_panel, frame])
+                writer.write(composite)
+            else:
+                writer.write(frame)
             written += 1
     finally:
         cap.release()
@@ -219,6 +231,39 @@ def annotate_video(
     else:
         log.warning("Annotated video left as mp4v: %s", temp_path)
     return transcoded
+
+
+def _draw_panel_label(frame, text: str, position: str = "right") -> None:
+    """Draw a small labelled banner on a panel (RAW / ANALYZED)."""
+    import cv2
+
+    h, w = frame.shape[:2]
+    pad_x = 12
+    pad_y = 8
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.6
+    thickness = 2
+    (tw, th), baseline = cv2.getTextSize(text, font, scale, thickness)
+    box_w = tw + pad_x * 2
+    box_h = th + pad_y * 2
+
+    if position == "right":
+        x1 = w - box_w - 12
+    else:
+        x1 = 12
+    y1 = 12
+    x2 = x1 + box_w
+    y2 = y1 + box_h
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 200), 1)
+    cv2.putText(
+        frame, text,
+        (x1 + pad_x, y1 + pad_y + th),
+        font, scale, (0, 255, 200), thickness, cv2.LINE_AA,
+    )
 
 
 def _draw_skeleton(frame, pose: FramePose) -> None:

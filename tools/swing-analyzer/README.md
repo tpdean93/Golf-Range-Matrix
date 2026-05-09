@@ -131,6 +131,7 @@ Copy `config.example.yaml` to `config.yaml`, then edit it:
 - `server.public_base_url` — set this to the sim PC URL, e.g. `http://192.168.68.150:8765`.
 - `obs.port` and `obs.password` — match OBS WebSocket settings.
 - `camera.angle` — `down_the_line` or `face_on`.
+- `annotation.side_by_side` — when `true` (default) the annotated MP4 is rendered as `RAW | ANALYZED` side by side so the HA Last Swing card plays both views in one player. Set to `false` for analyzed-only.
 - `annotation.overlays.*` — turn individual advanced overlays off if the video gets visually cluttered.
 - `llm.enabled` — `true` if you have Ollama / Trinity running locally.
 
@@ -280,6 +281,10 @@ The LLM receives the structured analysis JSON: club, camera angle, NOVA metrics,
 ```
 
 Keep the deterministic heuristics as the source of truth for extracted measurements. Use the LLM to explain patterns, rank likely issues, and suggest drills rather than to invent measurements from the video.
+
+## Side-by-side Raw + Analyzed View
+
+By default the annotated MP4 is rendered as a `RAW | ANALYZED` composite (raw video on the left, AI overlays on the right). The HA "Last Swing" card and any other consumer of `annotated_url` just plays the one MP4 and you see both views in the same player without changing the dashboard. Disable with `annotation.side_by_side: false` if you only want the analyzed panel.
 
 ## Advanced Overlays And Scores
 

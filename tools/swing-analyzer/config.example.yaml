@@ -20,6 +20,11 @@ camera:
 
 annotation:
   slow_motion_factor: 0.5
+  # When true, the annotated MP4 is rendered as a side-by-side composite:
+  # raw video on the left, AI body-mapping overlays on the right. The HA
+  # "Last Swing" card just plays the one MP4 and you see both views in
+  # the same player. Set false to render the analyzed view only.
+  side_by_side: true
   overlays:
     advanced: true
     pelvis_depth_line: true
