@@ -195,7 +195,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
             "create",
             {
                 "title": "Golf Range Matrix dashboard template",
-                "message": "The bundled dashboard template is available at `/golf_range_matrix/dashboards/golf-range-matrix-dashboard.json`. Add `/golf_range_matrix/golf-range-matrix-cards.js` as a Lovelace module resource.",
+                "message": "The bundled dashboard template is available at `/golf_range_matrix/dashboards/golf-range-matrix-dashboard.json`. The card resource `/golf_range_matrix/golf-range-matrix-cards.js` is registered automatically and its `?v=` cache-buster bumps with each integration version, so you should not need to manage it by hand. If a dashboard still shows stale cards, hard-refresh the browser (Ctrl+Shift+R).",
                 "notification_id": "golf_range_matrix_dashboard_template",
             },
             blocking=False,
