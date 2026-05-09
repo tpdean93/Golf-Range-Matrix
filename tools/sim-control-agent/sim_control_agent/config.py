@@ -41,6 +41,12 @@ DEFAULTS: Dict[str, Any] = {
         "start_command": "",
         "working_dir": "C:/golf-range-matrix/tools/swing-analyzer",
     },
+    "archive": {
+        "enabled": False,
+        "destination": "",
+        "keep_last": 5,
+        "filename_template": "swing_{timestamp}_{original}",
+    },
 }
 
 

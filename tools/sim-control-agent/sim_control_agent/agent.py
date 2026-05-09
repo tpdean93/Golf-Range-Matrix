@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -12,7 +13,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from .config import load_config
 
@@ -300,10 +301,69 @@ class SimControlAgent:
         return self._set_obs_scene(scene)
 
     def start_replay_buffer(self) -> Dict[str, Any]:
-        return self._call_obs_request("StartReplayBuffer", "Replay buffer start requested")
+        try:
+            client = self._obs_client()
+        except Exception as e:
+            return {"ok": False, "message": f"OBS connect failed: {e}"}
+
+        if self._is_replay_buffer_active(client) is True:
+            return {"ok": True, "message": "Replay buffer already running"}
+
+        try:
+            client.start_replay_buffer()
+        except Exception as e:
+            code = self._extract_obs_code(e)
+            if code == 702:
+                return {"ok": True, "message": "Replay buffer already running"}
+            return {
+                "ok": False,
+                "message": f"Request StartReplayBuffer returned {code or 'error'}: {e}",
+            }
+        return {"ok": True, "message": "Replay buffer start requested"}
 
     def save_replay_buffer(self) -> Dict[str, Any]:
-        return self._call_obs_request("SaveReplayBuffer", "Replay buffer save requested")
+        try:
+            client = self._obs_client()
+        except Exception as e:
+            return {"ok": False, "message": f"OBS connect failed: {e}"}
+
+        if self._is_replay_buffer_active(client) is False:
+            return {"ok": False, "message": "Replay buffer is not running"}
+
+        previous_path = self._read_last_replay_path(client)
+
+        try:
+            client.save_replay_buffer()
+        except Exception as e:
+            code = self._extract_obs_code(e)
+            if code == 703:
+                return {"ok": False, "message": "Replay buffer is not running"}
+            return {
+                "ok": False,
+                "message": f"Request SaveReplayBuffer returned {code or 'error'}: {e}",
+            }
+
+        new_path = self._wait_for_new_replay(client, previous=previous_path)
+        if not new_path:
+            return {"ok": True, "message": "Replay buffer save requested"}
+
+        archived_name, kept, skip_reason = self._archive_replay(Path(new_path))
+        if archived_name:
+            return {
+                "ok": True,
+                "message": (
+                    f"Saved {Path(new_path).name} -> HA media as {archived_name} "
+                    f"(kept {kept})"
+                ),
+            }
+        if skip_reason:
+            return {
+                "ok": True,
+                "message": (
+                    f"Saved {Path(new_path).name}; archive skipped: {skip_reason}"
+                ),
+            }
+        return {"ok": True, "message": f"Saved {Path(new_path).name}"}
 
     def restart_analyzer(self) -> Dict[str, Any]:
         stop_command = str(self.analyzer_cfg.get("stop_command") or "").strip()
@@ -348,32 +408,127 @@ class SimControlAgent:
             return {"ok": False, "message": f"Could not restart {task_name}: {detail[:160]}"}
         return {"ok": True, "message": f"Restarted scheduled task: {task_name}"}
 
-    def _call_obs_request(self, request_name: str, success_message: str) -> Dict[str, Any]:
+    def _is_replay_buffer_active(self, client) -> Optional[bool]:
         try:
-            from obsws_python import ReqClient
-        except ImportError:
-            return {
-                "ok": False,
-                "message": "obsws-python not installed; pip install -r requirements.txt",
-            }
+            response = client.get_replay_buffer_status()
+        except Exception as e:
+            log.debug("GetReplayBufferStatus failed: %s", e)
+            return None
+        value = self._read_attr(response, "output_active", "outputActive")
+        if value is None:
+            return None
+        return bool(value)
 
-        ws = self.obs_cfg.get("websocket", {})
-        client = ReqClient(
-            host=ws.get("host", "127.0.0.1"),
-            port=int(ws.get("port", 4455)),
-            password=ws.get("password") or "",
-            timeout=float(ws.get("timeout_seconds", 8)),
+    def _read_last_replay_path(self, client) -> Optional[str]:
+        try:
+            response = client.get_last_replay_buffer_replay()
+        except Exception as e:
+            log.debug("GetLastReplayBufferReplay failed: %s", e)
+            return None
+        return self._read_attr(response, "saved_replay_path", "savedReplayPath")
+
+    def _wait_for_new_replay(
+        self,
+        client,
+        previous: Optional[str],
+        attempts: int = 12,
+        delay: float = 0.5,
+    ) -> Optional[str]:
+        for _ in range(attempts):
+            path = self._read_last_replay_path(client)
+            if path and path != previous and Path(path).exists():
+                return path
+            time.sleep(delay)
+        return None
+
+    def _archive_replay(self, source: Path) -> Tuple[Optional[str], int, Optional[str]]:
+        archive_cfg = self.cfg.get("archive", {}) or {}
+        if not archive_cfg.get("enabled"):
+            return None, 0, None
+        dest_dir_raw = str(archive_cfg.get("destination") or "").strip()
+        if not dest_dir_raw:
+            return None, 0, "destination not configured"
+        keep = int(archive_cfg.get("keep_last") or 5)
+        template = str(
+            archive_cfg.get("filename_template") or "swing_{timestamp}_{original}"
         )
-        method_names = {
-            "StartReplayBuffer": "start_replay_buffer",
-            "SaveReplayBuffer": "save_replay_buffer",
-        }
-        method_name = method_names.get(request_name, request_name)
-        method = getattr(client, method_name, None)
-        if method is None:
-            return {"ok": False, "message": f"OBS request not supported: {request_name}"}
-        method()
-        return {"ok": True, "message": success_message}
+
+        if not source.exists():
+            return None, 0, f"source not found: {source}"
+
+        dest_dir = Path(dest_dir_raw)
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            return None, 0, f"could not open {dest_dir}: {e}"
+
+        timestamp = time.strftime(
+            "%Y%m%d_%H%M%S", time.localtime(source.stat().st_mtime)
+        )
+        target_name = template.format(timestamp=timestamp, original=source.name)
+        target = dest_dir / target_name
+        tmp = target.with_suffix(target.suffix + ".part")
+        try:
+            shutil.copy2(source, tmp)
+            os.replace(tmp, target)
+        except Exception as e:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
+            return None, 0, f"copy failed: {e}"
+
+        kept = self._prune_archive(dest_dir, keep)
+        return target.name, kept, None
+
+    def _prune_archive(self, folder: Path, keep: int) -> int:
+        if keep <= 0:
+            return 0
+        extensions = {".mp4", ".mkv", ".mov", ".flv", ".ts"}
+        try:
+            clips = sorted(
+                (
+                    p
+                    for p in folder.iterdir()
+                    if p.is_file() and p.suffix.lower() in extensions
+                ),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        except Exception as e:
+            log.warning("Could not enumerate archive %s: %s", folder, e)
+            return 0
+        for old in clips[keep:]:
+            try:
+                old.unlink()
+            except OSError as e:
+                log.warning("Could not remove old replay %s: %s", old, e)
+        return min(len(clips), keep)
+
+    @staticmethod
+    def _read_attr(response: Any, *names: str) -> Any:
+        for name in names:
+            value = getattr(response, name, None)
+            if value is not None:
+                return value
+        if isinstance(response, dict):
+            for name in names:
+                if response.get(name) is not None:
+                    return response.get(name)
+        return None
+
+    @staticmethod
+    def _extract_obs_code(exc: Exception) -> Optional[int]:
+        for attr in ("code", "request_status", "status_code"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, int):
+                return value
+            if value is not None and hasattr(value, "code"):
+                inner = getattr(value, "code", None)
+                if isinstance(inner, int):
+                    return inner
+        return None
 
     def _obs_client(self):
         try:
