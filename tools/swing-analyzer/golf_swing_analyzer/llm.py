@@ -12,13 +12,26 @@ import requests
 log = logging.getLogger(__name__)
 
 
+REQUIRED_COACHING_FIELDS = (
+    "priority_fault",
+    "why_it_matters",
+    "evidence",
+    "drill",
+    "confidence",
+)
+
+
 SYSTEM_PROMPT = (
-    "You are a golf swing analysis assistant. "
-    "Do not claim certainty from limited camera data. "
-    "Use NOVA for club/ball metrics and deterministic pose scores for body mechanics. "
-    "Do not invent measurements that are not present in the analysis JSON. "
-    "Explain cause and effect briefly and give one practical drill. "
-    "Reply with strict JSON only, matching the requested schema."
+    "You are my practical AI golf swing coach, not a generic sports commentator. "
+    "Coach an amateur golfer using a home simulator. Be honest, constructive, and "
+    "actionable. Prioritize contact, consistency, balance, distance, and ball flight. "
+    "Do not over-diagnose from one swing: separate what is confirmed, what is likely, "
+    "and what is uncertain. Use NOVA launch data and pose scores as supporting evidence, "
+    "but do not invent measurements. If pose markers jump or the camera angle/lighting "
+    "limits the view, say so and do not treat overlays as perfect truth. "
+    "Prioritize the top 2 or 3 issues only, explain in plain English, and give simple "
+    "home/simulator drills with what the golfer should feel. Reply with strict JSON only, "
+    "matching the requested schema."
 )
 
 
@@ -27,6 +40,136 @@ def _short_error(text: str, limit: int = 240) -> str:
     if len(clean) <= limit:
         return clean
     return clean[: limit - 3] + "..."
+
+
+def _first_value(data: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = data.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return ""
+
+
+def _dashboard_text(value: Any, limit: int = 240) -> str:
+    if isinstance(value, list):
+        text = " | ".join(str(item) for item in value if item)
+    elif isinstance(value, dict):
+        text = "; ".join(f"{key}: {val}" for key, val in value.items() if val)
+    else:
+        text = str(value or "")
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _parse_json_object(text: str) -> Any:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        parsed = json.loads(text[start : end + 1])
+    if isinstance(parsed, str):
+        parsed = json.loads(parsed)
+    return parsed
+
+
+def _normalize_coaching_json(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Accept a few common model aliases, then force the dashboard schema."""
+    return {
+        "priority_fault": _dashboard_text(_first_value(
+            data,
+            "priority_fault",
+            "priority",
+            "main_issue",
+            "most_important_fix",
+            "overall_grade",
+        )),
+        "why_it_matters": _dashboard_text(_first_value(
+            data,
+            "why_it_matters",
+            "quick_summary",
+            "summary",
+            "overall_summary",
+        )),
+        "evidence": _dashboard_text(_first_value(
+            data,
+            "evidence",
+            "observations",
+            "what_looks_good",
+            "main_issues",
+            "launch_monitor_interpretation",
+        )),
+        "drill": _dashboard_text(_first_value(
+            data,
+            "drill",
+            "drills",
+            "recommended_drills",
+            "most_important_drill",
+        )),
+        "confidence": _dashboard_text(_first_value(
+            data,
+            "confidence",
+            "camera_data_quality",
+            "data_quality",
+            "next_swing_checklist",
+        )),
+    }
+
+
+def _has_required_coaching(data: Dict[str, Any]) -> bool:
+    return all(data.get(key) not in (None, "", [], {}) for key in REQUIRED_COACHING_FIELDS)
+
+
+def _rounded(value: Any) -> Any:
+    if isinstance(value, float):
+        return round(value, 2)
+    if isinstance(value, dict):
+        return {k: _rounded(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rounded(v) for v in value[:12]]
+    return value
+
+
+def _compact_metrics(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    shot = analysis.get("nova") or analysis.get("shot", {})
+    shot_keys = (
+        "club",
+        "carry",
+        "total",
+        "offline",
+        "ball_speed",
+        "clubhead_speed",
+        "smash_factor",
+        "launch_angle",
+        "launch_direction",
+        "total_spin",
+        "backspin",
+        "sidespin",
+        "spin_axis",
+        "peak_height",
+        "descent_angle",
+        "shot_name",
+        "shot_rank",
+    )
+    advanced = analysis.get("advanced", {})
+    advanced_summary = {
+        "head_box": advanced.get("head_box"),
+        "pelvis_depth_line": advanced.get("pelvis_depth_line"),
+        "spine_inclination_line": advanced.get("spine_inclination_line"),
+    }
+    return {
+        "launch_monitor": {k: _rounded(shot.get(k)) for k in shot_keys if k in shot},
+        "body": _rounded(analysis.get("body", {})),
+        "advanced_summary": _rounded({k: v for k, v in advanced_summary.items() if v}),
+        "scores": _rounded(analysis.get("scores", {})),
+        "score_summary": analysis.get("score_summary"),
+        "faults": analysis.get("faults", []),
+        "body_summary": analysis.get("body_summary"),
+    }
 
 
 def _sample_positions(frame_count: int, count: int) -> list[int]:
@@ -114,28 +257,39 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
 
     images = _collect_visual_frames(cfg, analysis)
 
+    compact_metrics = _compact_metrics(analysis)
     user_prompt = (
-        "Analyze this golf swing.\n\n"
+        "Review this golf swing like a practical golf instructor.\n\n"
         f"Club: {analysis.get('club')}\n"
         f"Camera angle: {analysis.get('camera_angle')}\n"
-        f"NOVA metrics: {json.dumps(analysis.get('nova', {}))}\n"
-        f"Body metrics: {json.dumps(analysis.get('body', {}))}\n"
-        f"Advanced traces: {json.dumps(analysis.get('advanced', {}))}\n"
-        f"Swing scores: {json.dumps(analysis.get('scores', {}))}\n"
-        f"Score summary: {analysis.get('score_summary')}\n"
-        f"Detected faults: {json.dumps(analysis.get('faults', []))}\n\n"
+        f"Swing data: {json.dumps(compact_metrics)}\n\n"
         f"Visual frames attached: {len(images)}. When images are attached, they are sampled "
         "from the raw swing video and the annotated/marker video. Use the raw golfer motion "
         "as primary evidence; marker overlays may be approximate or temporarily inaccurate. "
         "Review the sequence across as many attached frames as needed before deciding the priority issue.\n"
         "Treat hip depth and balance as camera-specific trend metrics, not true 3D measurements.\n"
-        "Reply with JSON only:\n"
+        "\nAnalyze, when visible, setup, takeaway, backswing, transition, downswing, impact, "
+        "follow-through, tempo/balance, and the launch monitor numbers. Do not list every "
+        "possible flaw. Pick the top 2 or 3 items that most affect the next swing.\n"
+        "\nKeep each JSON value concise enough for Home Assistant sensor display. Use this "
+        "mapping so the dashboard still renders correctly:\n"
+        "- priority_fault: Overall Grade plus the single most important fix.\n"
+        "- why_it_matters: 3-5 sentence quick summary in plain English.\n"
+        "- evidence: one short string covering what looks good, confirmed issues, likely issues, "
+        "launch-monitor interpretation, and data/camera quality notes.\n"
+        "- drill: 2-3 drills; for each include what it fixes, how to do it, what to feel, and reps.\n"
+        "- confidence: low|medium|high plus one short reason and a 3-item next swing checklist.\n"
+        "Do not use alternate keys like priority, observations, drills, or summary. The required "
+        "keys are exactly priority_fault, why_it_matters, evidence, drill, and confidence.\n"
+        "Keep every value under 220 characters. Do not return arrays. Do not repeat phrases, "
+        "do not emit placeholders, and do not put schema/field names inside the values.\n"
+        "\nReply with JSON only:\n"
         "{\n"
-        '  "priority_fault": "...",\n'
-        '  "why_it_matters": "...",\n'
-        '  "evidence": ["...", "..."],\n'
-        '  "drill": "...",\n'
-        '  "confidence": "low|medium|high"\n'
+        '  "priority_fault": "Overall Grade: ... | Most Important Fix: ...",\n'
+        '  "why_it_matters": "Quick Summary: ...",\n'
+        '  "evidence": "Good: ... Issues: ... Data: ...",\n'
+        '  "drill": "Recommended Drills: 1) ... 2) ... 3) ...",\n'
+        '  "confidence": "medium - reason. Next: 1) ... 2) ... 3) ..."\n'
         "}"
     )
 
@@ -145,9 +299,14 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         "prompt": user_prompt,
         "stream": False,
         "format": "json",
+        "options": {
+            "temperature": float(cfg.get("temperature", 0.2)),
+            "num_predict": int(cfg.get("max_tokens", 350)),
+        },
     }
     if images:
         body["images"] = images
+    sent_visual_frames = len(images)
     try:
         r = requests.post(endpoint, json=body, timeout=timeout)
         if r.status_code >= 400:
@@ -165,7 +324,7 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
                     return {
                         "llm_status": "failed",
                         "llm_error": error,
-                        "visual_frames_sent": len(images),
+                        "visual_frames_sent": sent_visual_frames,
                     }
             else:
                 return {
@@ -175,13 +334,40 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
                 }
         data = r.json()
     except Exception as e:
-        error = _short_error(f"LLM call failed: {e}")
-        log.warning(error)
-        return {
-            "llm_status": "failed",
-            "llm_error": error,
-            "visual_frames_sent": len(images),
-        }
+        if images:
+            error = _short_error(f"LLM visual call failed, retrying without images: {e}")
+            log.warning(error)
+            try:
+                body.pop("images", None)
+                images = []
+                r = requests.post(endpoint, json=body, timeout=timeout)
+                if r.status_code >= 400:
+                    error = _short_error(
+                        f"LLM {endpoint} returned HTTP {r.status_code} without visual frames"
+                    )
+                    log.warning(error)
+                    return {
+                        "llm_status": "failed",
+                        "llm_error": error,
+                        "visual_frames_sent": sent_visual_frames,
+                    }
+                data = r.json()
+            except Exception as retry_error:
+                error = _short_error(f"LLM call failed without visual frames: {retry_error}")
+                log.warning(error)
+                return {
+                    "llm_status": "failed",
+                    "llm_error": error,
+                    "visual_frames_sent": sent_visual_frames,
+                }
+        else:
+            error = _short_error(f"LLM call failed: {e}")
+            log.warning(error)
+            return {
+                "llm_status": "failed",
+                "llm_error": error,
+                "visual_frames_sent": 0,
+            }
 
     response = (
         data.get("response")
@@ -192,16 +378,55 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         return {
             "llm_status": "empty_response",
             "llm_error": "LLM response did not include response/message.content",
-            "visual_frames_sent": len(images),
+            "visual_frames_sent": sent_visual_frames,
         }
 
     try:
-        parsed = json.loads(response)
+        parsed = _parse_json_object(response)
         if isinstance(parsed, dict):
-            parsed["llm_status"] = "ok"
-            parsed["llm_error"] = ""
-            parsed["visual_frames_sent"] = len(images)
-            return parsed
+            normalized = _normalize_coaching_json(parsed)
+            if _has_required_coaching(normalized):
+                normalized["llm_status"] = "ok"
+                normalized["llm_error"] = ""
+                normalized["visual_frames_sent"] = sent_visual_frames
+                return normalized
+
+            retry_prompt = (
+                "Your previous JSON did not match the required dashboard schema:\n"
+                f"{json.dumps(parsed)}\n\n"
+                "Using the same swing context below, return JSON with exactly these keys: "
+                "priority_fault, why_it_matters, evidence, drill, confidence. Every key must "
+                "have useful non-empty coaching content. Do not add alternate key names.\n\n"
+                f"{user_prompt}"
+            )
+            retry_body = dict(body)
+            retry_body["prompt"] = retry_prompt
+            retry_body.pop("images", None)
+            try:
+                retry = requests.post(endpoint, json=retry_body, timeout=timeout)
+                retry.raise_for_status()
+                retry_data = retry.json()
+                retry_response = (
+                    retry_data.get("response")
+                    or retry_data.get("thinking")
+                    or retry_data.get("message", {}).get("content")
+                )
+                retry_parsed = _parse_json_object(retry_response or "")
+                if isinstance(retry_parsed, dict):
+                    normalized = _normalize_coaching_json(retry_parsed)
+                    if _has_required_coaching(normalized):
+                        normalized["llm_status"] = "ok"
+                        normalized["llm_error"] = ""
+                        normalized["visual_frames_sent"] = sent_visual_frames
+                        return normalized
+            except Exception as e:
+                log.info("LLM schema repair failed: %s", e)
+
+            return {
+                "llm_status": "invalid_response",
+                "llm_error": "LLM JSON omitted required coaching fields",
+                "visual_frames_sent": sent_visual_frames,
+            }
     except Exception:
         log.info("LLM response was not valid JSON; returning raw text")
         return {
@@ -209,10 +434,10 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
             "confidence": "low",
             "llm_status": "raw_text",
             "llm_error": "",
-            "visual_frames_sent": len(images),
+            "visual_frames_sent": sent_visual_frames,
         }
     return {
         "llm_status": "invalid_response",
         "llm_error": "LLM response parsed to a non-object JSON value",
-        "visual_frames_sent": len(images),
+        "visual_frames_sent": sent_visual_frames,
     }
