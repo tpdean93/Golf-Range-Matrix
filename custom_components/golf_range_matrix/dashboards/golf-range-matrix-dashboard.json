@@ -32,7 +32,16 @@
               "title": "Last Swing",
               "grid_options": {
                 "columns": "full",
-                "rows": 10
+                "rows": 14
+              }
+            },
+            {
+              "type": "markdown",
+              "title": "Local LLM Coaching",
+              "content": "### Trinity Swing Coach\n\n**Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') or 'Waiting for Trinity analysis' }}\n\n**Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}\n\n**Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}\n\n**Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}\n\n**Confidence:** {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}\n\n**Fallback:** {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}\n\n**LLM status:** {{ states('sensor.golf_swing_analyzer_last_swing_llm_status') }}\n\n{{ states('sensor.golf_swing_analyzer_last_swing_llm_error') }}",
+              "grid_options": {
+                "columns": "full",
+                "rows": 5
               }
             }
           ]
@@ -133,7 +142,16 @@
               "title": "Last Swing",
               "grid_options": {
                 "columns": "full",
-                "rows": 10
+                "rows": 14
+              }
+            },
+            {
+              "type": "markdown",
+              "title": "Local LLM Coaching",
+              "content": "### Trinity Swing Coach\n\n**Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') or 'Waiting for Trinity analysis' }}\n\n**Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}\n\n**Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}\n\n**Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}\n\n**Confidence:** {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}\n\n**Fallback:** {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}\n\n**LLM status:** {{ states('sensor.golf_swing_analyzer_last_swing_llm_status') }}\n\n{{ states('sensor.golf_swing_analyzer_last_swing_llm_error') }}",
+              "grid_options": {
+                "columns": "full",
+                "rows": 5
               }
             },
             {

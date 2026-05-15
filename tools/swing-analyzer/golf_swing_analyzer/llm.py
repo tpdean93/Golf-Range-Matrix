@@ -22,6 +22,13 @@ SYSTEM_PROMPT = (
 )
 
 
+def _short_error(text: str, limit: int = 240) -> str:
+    clean = " ".join(str(text or "").split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 3] + "..."
+
+
 def _sample_positions(frame_count: int, count: int) -> list[int]:
     if frame_count <= 0 or count <= 0:
         return []
@@ -144,14 +151,16 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
     try:
         r = requests.post(endpoint, json=body, timeout=timeout)
         if r.status_code >= 400:
-            error = f"LLM {endpoint} returned HTTP {r.status_code}"
+            error = _short_error(f"LLM {endpoint} returned HTTP {r.status_code}")
             log.warning(error)
             if images:
                 log.warning("Retrying LLM without visual frames; model may not support vision")
                 body.pop("images", None)
                 r = requests.post(endpoint, json=body, timeout=timeout)
                 if r.status_code >= 400:
-                    error = f"LLM {endpoint} returned HTTP {r.status_code} without visual frames"
+                    error = _short_error(
+                        f"LLM {endpoint} returned HTTP {r.status_code} without visual frames"
+                    )
                     log.warning(error)
                     return {
                         "llm_status": "failed",
@@ -166,7 +175,7 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
                 }
         data = r.json()
     except Exception as e:
-        error = f"LLM call failed: {e}"
+        error = _short_error(f"LLM call failed: {e}")
         log.warning(error)
         return {
             "llm_status": "failed",

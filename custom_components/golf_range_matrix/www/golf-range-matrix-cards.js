@@ -808,3 +808,4 @@ novaDefine('range-bag-builder-card', NovaBagBuilderCard);
 novaDefine('range-wedge-matrix-card', NovaWedgeMatrixCard);
 novaDefine('range-club-results-card', GolfClubResultsCard);
 novaDefine('range-swing-video-card', RangeSwingVideoCard);
+novaDefine('swing-video-card', RangeSwingVideoCard);
