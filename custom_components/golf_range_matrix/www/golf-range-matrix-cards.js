@@ -718,6 +718,8 @@ class RangeSwingVideoCard extends HTMLElement {
       evidence_entity: 'sensor.golf_swing_analyzer_last_swing_evidence',
       drill_entity: 'sensor.golf_swing_analyzer_last_swing_drill',
       confidence_entity: 'sensor.golf_swing_analyzer_last_swing_confidence',
+      llm_status_entity: 'sensor.golf_swing_analyzer_last_swing_llm_status',
+      llm_error_entity: 'sensor.golf_swing_analyzer_last_swing_llm_error',
       title: 'Last Swing',
       ...config,
     };
@@ -728,7 +730,7 @@ class RangeSwingVideoCard extends HTMLElement {
       this.config.switch_entity, this.config.url_entity, this.config.timestamp_entity,
       this.config.club_entity, this.config.summary_entity, this.config.priority_entity,
       this.config.why_entity, this.config.evidence_entity, this.config.drill_entity,
-      this.config.confidence_entity,
+      this.config.confidence_entity, this.config.llm_status_entity, this.config.llm_error_entity,
     ];
     const signature = ids.map((id) => `${id}:${hass.states?.[id]?.state || ''}:${hass.states?.[id]?.last_changed || ''}`).join('|');
     if (signature === this._signature) return;
@@ -754,15 +756,20 @@ class RangeSwingVideoCard extends HTMLElement {
     const evidence = this.text(this.config.evidence_entity);
     const drill = this.text(this.config.drill_entity);
     const confidence = this.text(this.config.confidence_entity);
+    const status = this.text(this.config.llm_status_entity);
+    const error = this.text(this.config.llm_error_entity);
     const summary = this.text(this.config.summary_entity);
-    if (![priority, why, evidence, drill, summary].some(Boolean)) return '';
     const evidenceItems = evidence.split(/\s+\|\s+|\n+/).map(item => item.trim()).filter(Boolean);
+    const hasAi = [priority, why, evidence, drill].some(Boolean);
+    const title = hasAi ? (priority || 'Swing analysis') : 'Waiting for Trinity analysis';
+    const fallback = !hasAi && summary ? `Deterministic pose fallback: ${summary}` : 'No LLM result has been published for this swing yet.';
     return `<section class="coach">
-      <div class="coachHead"><div><div class="kicker">Local LLM Breakdown</div><h3>${novaEsc(priority || 'Swing analysis')}</h3></div>${confidence ? `<span>${novaEsc(confidence)}</span>` : ''}</div>
-      ${summary && summary !== priority ? `<p>${novaEsc(summary)}</p>` : ''}
+      <div class="coachHead"><div><div class="kicker">Local LLM Breakdown</div><h3>${novaEsc(title)}</h3></div>${confidence || status ? `<span>${novaEsc(confidence || status)}</span>` : ''}</div>
+      ${hasAi && summary && summary !== priority ? `<p>${novaEsc(summary)}</p>` : `<p>${novaEsc(fallback)}</p>`}
       ${why ? `<div class="coachBlock"><b>Why it matters</b><p>${novaEsc(why)}</p></div>` : ''}
       ${evidenceItems.length ? `<div class="coachBlock"><b>Evidence</b><ul>${evidenceItems.map(item => `<li>${novaEsc(item)}</li>`).join('')}</ul></div>` : ''}
       ${drill ? `<div class="coachBlock"><b>Drill</b><p>${novaEsc(drill)}</p></div>` : ''}
+      ${error ? `<div class="coachBlock errorText"><b>LLM status</b><p>${novaEsc(error)}</p></div>` : ''}
     </section>`;
   }
   render() {
@@ -782,7 +789,7 @@ class RangeSwingVideoCard extends HTMLElement {
       ${this.coaching()}
     </div></ha-card><style>
       ha-card{border:0;border-radius:28px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}
-      .swing-card{padding:18px;position:relative;isolation:isolate}.swing-card:before{content:'';position:absolute;inset:-35% auto auto 42%;width:360px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 65%);z-index:-1}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h2{margin:2px 0 0;font-size:25px;font-weight:950;letter-spacing:-.04em}.meta{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:800}.toggle{height:38px;min-width:82px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);font-weight:950;cursor:pointer}.toggle ha-icon{--mdc-icon-size:19px;color:#8ffcff}.toggle.on{background:rgba(114,255,125,.14);border-color:rgba(114,255,125,.42);color:#d8ffdc}.toggle.on ha-icon{color:#72ff7d}.video{width:100%;aspect-ratio:16/9;min-height:320px;background:#000;border-radius:20px;display:block;object-fit:contain}.empty{display:grid;place-items:center;min-height:280px;border-radius:20px;background:rgba(0,0,0,.28);color:rgba(255,255,255,.62);font-weight:800;text-align:center;padding:14px}.coach{margin-top:14px;border:1px solid rgba(56,248,255,.18);border-radius:22px;background:rgba(56,248,255,.07);padding:14px}.coachHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.coach h3{margin:2px 0 0;font-size:20px;line-height:1.1;letter-spacing:-.03em}.coachHead span{border:1px solid rgba(247,255,92,.28);border-radius:999px;padding:6px 9px;color:#f7ff8a;font-size:11px;font-weight:950;text-transform:uppercase}.coach p{margin:8px 0 0;color:rgba(255,255,255,.80);font-weight:760;line-height:1.42}.coachBlock{margin-top:12px}.coachBlock b{display:block;color:#8ffcff;text-transform:uppercase;letter-spacing:.12em;font-size:10px}.coachBlock ul{margin:8px 0 0;padding-left:19px;color:rgba(255,255,255,.80);font-weight:760;line-height:1.4}@media(max-width:900px){.video{min-height:220px}.empty{min-height:220px}}
+      .swing-card{padding:18px;position:relative;isolation:isolate}.swing-card:before{content:'';position:absolute;inset:-35% auto auto 42%;width:360px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 65%);z-index:-1}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h2{margin:2px 0 0;font-size:25px;font-weight:950;letter-spacing:-.04em}.meta{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:800}.toggle{height:38px;min-width:82px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);font-weight:950;cursor:pointer}.toggle ha-icon{--mdc-icon-size:19px;color:#8ffcff}.toggle.on{background:rgba(114,255,125,.14);border-color:rgba(114,255,125,.42);color:#d8ffdc}.toggle.on ha-icon{color:#72ff7d}.video{width:100%;aspect-ratio:16/9;min-height:320px;background:#000;border-radius:20px;display:block;object-fit:contain}.empty{display:grid;place-items:center;min-height:280px;border-radius:20px;background:rgba(0,0,0,.28);color:rgba(255,255,255,.62);font-weight:800;text-align:center;padding:14px}.coach{margin-top:14px;border:1px solid rgba(56,248,255,.18);border-radius:22px;background:rgba(56,248,255,.07);padding:14px}.coachHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.coach h3{margin:2px 0 0;font-size:20px;line-height:1.1;letter-spacing:-.03em}.coachHead span{border:1px solid rgba(247,255,92,.28);border-radius:999px;padding:6px 9px;color:#f7ff8a;font-size:11px;font-weight:950;text-transform:uppercase}.coach p{margin:8px 0 0;color:rgba(255,255,255,.80);font-weight:760;line-height:1.42}.coachBlock{margin-top:12px}.coachBlock b{display:block;color:#8ffcff;text-transform:uppercase;letter-spacing:.12em;font-size:10px}.coachBlock ul{margin:8px 0 0;padding-left:19px;color:rgba(255,255,255,.80);font-weight:760;line-height:1.4}.errorText b{color:#ff9aad}.errorText p{color:#ffd2dc}@media(max-width:900px){.video{min-height:220px}.empty{min-height:220px}}
     </style>`;
     this.querySelector('.toggle')?.addEventListener('click', () => this.toggle());
     const video = this.querySelector('video');

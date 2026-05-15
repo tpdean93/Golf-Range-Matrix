@@ -286,6 +286,8 @@ The prompt tells the model to use raw golfer motion as primary evidence and trea
 
 Keep the deterministic heuristics as the source of truth for extracted measurements. Use the LLM to explain patterns, rank likely issues, and suggest drills rather than to invent measurements from the video.
 
+If Trinity/Ollama is unreachable or the model rejects image input, the dashboard still shows a Local LLM Breakdown box under the swing video with the deterministic fallback and the latest LLM status/error. Check `sensor.golf_swing_analyzer_last_swing_llm_status` and `sensor.golf_swing_analyzer_last_swing_llm_error` when the coaching text is missing.
+
 ## Side-by-side Raw + Analyzed View
 
 By default the annotated MP4 is rendered as a `RAW | ANALYZED` composite (raw video on the left, AI overlays on the right). The HA "Last Swing" card and any other consumer of `annotated_url` just plays the one MP4 and you see both views in the same player without changing the dashboard. Disable with `annotation.side_by_side: false` if you only want the analyzed panel.

@@ -103,7 +103,7 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
     model = cfg.get("model", "trinity")
     timeout = int(cfg.get("timeout_seconds", 60))
     if not endpoint:
-        return None
+        return {"llm_status": "not_configured", "llm_error": "LLM endpoint is empty"}
 
     images = _collect_visual_frames(cfg, analysis)
 
@@ -144,28 +144,49 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
     try:
         r = requests.post(endpoint, json=body, timeout=timeout)
         if r.status_code >= 400:
-            log.warning("LLM %s returned %s", endpoint, r.status_code)
+            error = f"LLM {endpoint} returned HTTP {r.status_code}"
+            log.warning(error)
             if images:
                 log.warning("Retrying LLM without visual frames; model may not support vision")
                 body.pop("images", None)
                 r = requests.post(endpoint, json=body, timeout=timeout)
                 if r.status_code >= 400:
-                    log.warning("LLM %s returned %s without visual frames", endpoint, r.status_code)
-                    return None
+                    error = f"LLM {endpoint} returned HTTP {r.status_code} without visual frames"
+                    log.warning(error)
+                    return {
+                        "llm_status": "failed",
+                        "llm_error": error,
+                        "visual_frames_sent": len(images),
+                    }
             else:
-                return None
+                return {
+                    "llm_status": "failed",
+                    "llm_error": error,
+                    "visual_frames_sent": 0,
+                }
         data = r.json()
     except Exception as e:
-        log.warning("LLM call failed: %s", e)
-        return None
+        error = f"LLM call failed: {e}"
+        log.warning(error)
+        return {
+            "llm_status": "failed",
+            "llm_error": error,
+            "visual_frames_sent": len(images),
+        }
 
     response = data.get("response") or data.get("message", {}).get("content")
     if not response:
-        return None
+        return {
+            "llm_status": "empty_response",
+            "llm_error": "LLM response did not include response/message.content",
+            "visual_frames_sent": len(images),
+        }
 
     try:
         parsed = json.loads(response)
         if isinstance(parsed, dict):
+            parsed["llm_status"] = "ok"
+            parsed["llm_error"] = ""
             parsed["visual_frames_sent"] = len(images)
             return parsed
     except Exception:
@@ -173,6 +194,12 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         return {
             "summary": response.strip(),
             "confidence": "low",
+            "llm_status": "raw_text",
+            "llm_error": "",
             "visual_frames_sent": len(images),
         }
-    return None
+    return {
+        "llm_status": "invalid_response",
+        "llm_error": "LLM response parsed to a non-object JSON value",
+        "visual_frames_sent": len(images),
+    }

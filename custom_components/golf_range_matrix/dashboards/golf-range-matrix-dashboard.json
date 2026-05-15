@@ -151,6 +151,8 @@
                 "sensor.golf_swing_analyzer_last_swing_evidence",
                 "sensor.golf_swing_analyzer_last_swing_drill",
                 "sensor.golf_swing_analyzer_last_swing_confidence",
+                "sensor.golf_swing_analyzer_last_swing_llm_status",
+                "sensor.golf_swing_analyzer_last_swing_llm_error",
                 "sensor.golf_swing_analyzer_last_swing_annotated_url",
                 "sensor.golf_swing_analyzer_last_swing_raw_url",
                 "sensor.golf_swing_analyzer_last_swing_timestamp"

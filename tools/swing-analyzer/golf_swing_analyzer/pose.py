@@ -65,6 +65,7 @@ def detect_video_pose(
     video_path: str,
     sample_rate: int = 2,
     min_torso_visibility: float = 0.6,
+    smoothing_alpha: float = 0.35,
 ) -> Tuple[List[FramePose], int, int, float, int]:
     """Run MediaPipe Pose Landmarker on every Nth frame.
 
@@ -157,11 +158,54 @@ def detect_video_pose(
             )
 
     cap.release()
+    if smoothing_alpha > 0 and frames:
+        frames = _smooth_frames(frames, width, height, smoothing_alpha)
+
     log.info(
         "Pose: %d kept frames, %d rejected (low torso vis), %dx%d @ %.2f fps (total %d)",
         len(frames), rejected_low_vis, width, height, fps, total,
     )
     return frames, width, height, fps, total
+
+
+def _smooth_frames(
+    frames: List[FramePose],
+    width: int,
+    height: int,
+    alpha: float,
+) -> List[FramePose]:
+    """Reduce frame-to-frame marker jitter without changing phase timing."""
+    alpha = max(0.05, min(1.0, float(alpha)))
+    smoothed: Dict[str, Tuple[float, float, float]] = {}
+    out: List[FramePose] = []
+    for frame in frames:
+        landmarks: Dict[str, Tuple[float, float, float]] = {}
+        pixels: Dict[str, Tuple[int, int]] = {}
+        for name, point in frame.landmarks.items():
+            prev = smoothed.get(name)
+            vis = frame.visibility.get(name, 1.0)
+            effective_alpha = alpha if vis >= 0.65 else alpha * 0.5
+            if prev is None:
+                smooth = point
+            else:
+                smooth = (
+                    prev[0] + effective_alpha * (point[0] - prev[0]),
+                    prev[1] + effective_alpha * (point[1] - prev[1]),
+                    prev[2] + effective_alpha * (point[2] - prev[2]),
+                )
+            smoothed[name] = smooth
+            landmarks[name] = smooth
+            pixels[name] = (int(smooth[0] * width), int(smooth[1] * height))
+        out.append(
+            FramePose(
+                frame_index=frame.frame_index,
+                timestamp_s=frame.timestamp_s,
+                landmarks=landmarks,
+                pixel_landmarks=pixels,
+                visibility=dict(frame.visibility),
+            )
+        )
+    return out
 
 
 def midpoint(a: Tuple[float, float], b: Tuple[float, float]) -> Tuple[float, float]:

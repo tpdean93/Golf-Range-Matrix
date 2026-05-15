@@ -366,9 +366,15 @@ class Analyzer:
             analysis["llm_evidence"] = evidence_text
             analysis["llm_drill"] = str(llm_result.get("drill") or "")
             analysis["llm_confidence"] = str(llm_result.get("confidence") or "")
+            analysis["llm_status"] = str(llm_result.get("llm_status") or "ok")
+            analysis["llm_error"] = str(llm_result.get("llm_error") or "")
             analysis["llm"] = llm_result
         else:
             analysis["summary"] = analysis["body_summary"]
+            analysis["llm_status"] = (
+                "disabled" if not self.cfg.get("llm", {}).get("enabled") else "not_run"
+            )
+            analysis["llm_error"] = ""
 
         analysis_path = self.analysis_dir / f"{stamp}_analysis.json"
         try:
