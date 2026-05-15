@@ -21,6 +21,18 @@
               "type": "custom:range-shot-tracer-card"
             },
             {
+              "type": "markdown",
+              "title": "Local LLM Coaching",
+              "content": "### Trinity Swing Coach\n\n**Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') or 'Waiting for Trinity analysis' }}\n\n**Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}\n\n**Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}\n\n**Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}\n\n**Confidence:** {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}\n\n**Fallback:** {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}\n\n**LLM status:** {{ states('sensor.golf_swing_analyzer_last_swing_llm_status') }}\n\n{{ states('sensor.golf_swing_analyzer_last_swing_llm_error') }}",
+              "grid_options": {
+                "columns": "full",
+                "rows": 7
+              },
+              "card_mod": {
+                "style": "ha-card { border: 1px solid rgba(56,248,255,.22); border-radius: 24px; color: #eef8ff; background: radial-gradient(circle at 85% 10%, rgba(56,248,255,.18), transparent 28%), radial-gradient(circle at 15% 90%, rgba(168,85,247,.22), transparent 34%), linear-gradient(145deg, rgba(18,25,45,.94), rgba(8,12,24,.86)); box-shadow: 0 22px 60px rgba(0,0,0,.34); overflow: hidden; } ha-card .card-header { color: #8ffcff; font-size: 13px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; } ha-markdown { color: #eef8ff; } ha-markdown h3 { color: #f7ff8a; font-size: 20px; margin-top: 0; } ha-markdown strong { color: #8ffcff; }"
+              }
+            },
+            {
               "type": "custom:range-metric-panel-card",
               "title": "Live Numbers"
             },
@@ -33,15 +45,6 @@
               "grid_options": {
                 "columns": "full",
                 "rows": 14
-              }
-            },
-            {
-              "type": "markdown",
-              "title": "Local LLM Coaching",
-              "content": "### Trinity Swing Coach\n\n**Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') or 'Waiting for Trinity analysis' }}\n\n**Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}\n\n**Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}\n\n**Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}\n\n**Confidence:** {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}\n\n**Fallback:** {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}\n\n**LLM status:** {{ states('sensor.golf_swing_analyzer_last_swing_llm_status') }}\n\n{{ states('sensor.golf_swing_analyzer_last_swing_llm_error') }}",
-              "grid_options": {
-                "columns": "full",
-                "rows": 5
               }
             }
           ]
@@ -151,7 +154,10 @@
               "content": "### Trinity Swing Coach\n\n**Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') or 'Waiting for Trinity analysis' }}\n\n**Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}\n\n**Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}\n\n**Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}\n\n**Confidence:** {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}\n\n**Fallback:** {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}\n\n**LLM status:** {{ states('sensor.golf_swing_analyzer_last_swing_llm_status') }}\n\n{{ states('sensor.golf_swing_analyzer_last_swing_llm_error') }}",
               "grid_options": {
                 "columns": "full",
-                "rows": 5
+                "rows": 7
+              },
+              "card_mod": {
+                "style": "ha-card { border: 1px solid rgba(56,248,255,.22); border-radius: 24px; color: #eef8ff; background: radial-gradient(circle at 85% 10%, rgba(56,248,255,.18), transparent 28%), radial-gradient(circle at 15% 90%, rgba(168,85,247,.22), transparent 34%), linear-gradient(145deg, rgba(18,25,45,.94), rgba(8,12,24,.86)); box-shadow: 0 22px 60px rgba(0,0,0,.34); overflow: hidden; } ha-card .card-header { color: #8ffcff; font-size: 13px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; } ha-markdown { color: #eef8ff; } ha-markdown h3 { color: #f7ff8a; font-size: 20px; margin-top: 0; } ha-markdown strong { color: #8ffcff; }"
               }
             },
             {

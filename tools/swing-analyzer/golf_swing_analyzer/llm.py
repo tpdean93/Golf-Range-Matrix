@@ -183,7 +183,11 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
             "visual_frames_sent": len(images),
         }
 
-    response = data.get("response") or data.get("message", {}).get("content")
+    response = (
+        data.get("response")
+        or data.get("thinking")
+        or data.get("message", {}).get("content")
+    )
     if not response:
         return {
             "llm_status": "empty_response",
