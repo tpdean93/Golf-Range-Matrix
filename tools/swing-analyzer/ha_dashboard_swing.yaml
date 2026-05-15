@@ -11,6 +11,11 @@
 #       sensor.golf_swing_analyzer_last_swing_body_summary
 #       sensor.golf_swing_analyzer_last_swing_faults
 #       sensor.golf_swing_analyzer_last_swing_summary
+#       sensor.golf_swing_analyzer_last_swing_priority_fault
+#       sensor.golf_swing_analyzer_last_swing_why_it_matters
+#       sensor.golf_swing_analyzer_last_swing_evidence
+#       sensor.golf_swing_analyzer_last_swing_drill
+#       sensor.golf_swing_analyzer_last_swing_confidence
 #       sensor.golf_swing_analyzer_last_swing_annotated_url
 #       sensor.golf_swing_analyzer_last_swing_raw_url
 #       sensor.golf_swing_analyzer_last_swing_timestamp
@@ -65,9 +70,17 @@ cards:
           - entity: sensor.golf_swing_analyzer_last_swing_faults
             name: Detected faults
       - type: markdown
-        title: Coaching note
+        title: Local LLM breakdown
         content: >
-          {{ states('sensor.golf_swing_analyzer_last_swing_summary') }}
+          **Priority:** {{ states('sensor.golf_swing_analyzer_last_swing_priority_fault') }}
+
+          **Why it matters:** {{ states('sensor.golf_swing_analyzer_last_swing_why_it_matters') }}
+
+          **Evidence:** {{ states('sensor.golf_swing_analyzer_last_swing_evidence') }}
+
+          **Drill:** {{ states('sensor.golf_swing_analyzer_last_swing_drill') }}
+
+          Confidence: {{ states('sensor.golf_swing_analyzer_last_swing_confidence') }}
 
   # ---- Trigger card ---------------------------------------------------------
   - type: markdown

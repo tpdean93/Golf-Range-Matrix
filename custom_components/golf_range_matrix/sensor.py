@@ -27,6 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             NovaWorkflowSensor(coordinator),
             NovaBagSummarySensor(coordinator),
             NovaLatestShotSensor(coordinator),
+            NovaRecentShotsSensor(coordinator),
         ]
     )
     async_add_entities(entities)
@@ -125,3 +126,22 @@ class NovaLatestShotSensor(NovaGolfEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return latest shot fields."""
         return self.coordinator.data.get("latest_shot") or {}
+
+
+class NovaRecentShotsSensor(NovaGolfEntity, SensorEntity):
+    """Expose the last persisted shots for custom dashboard cards."""
+
+    def __init__(self, coordinator: NovaGolfCoordinator) -> None:
+        super().__init__(coordinator, "recent_shots", "Recent Shots", "mdi:history")
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of recent shots in the current snapshot."""
+        return len(self.coordinator.data.get("recent_shots") or [])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return recent shots in oldest-to-newest order for charting."""
+        shots = list(self.coordinator.data.get("recent_shots") or [])
+        shots.reverse()
+        return {"shots": shots}

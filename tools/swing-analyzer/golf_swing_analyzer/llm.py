@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
+import base64
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
@@ -20,6 +22,79 @@ SYSTEM_PROMPT = (
 )
 
 
+def _sample_positions(frame_count: int, count: int) -> list[int]:
+    if frame_count <= 0 or count <= 0:
+        return []
+    if count == 1:
+        return [frame_count // 2]
+    return sorted({round(i * (frame_count - 1) / (count - 1)) for i in range(count)})
+
+
+def _video_frames(path: str, count: int, max_width: int, quality: int) -> list[str]:
+    """Return base64 JPEG frames for Ollama vision models."""
+    video = Path(path)
+    if not video.exists() or count <= 0:
+        return []
+    try:
+        import cv2
+    except ImportError:
+        log.warning("OpenCV is not available; LLM visual frames skipped")
+        return []
+
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        return []
+    try:
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        images: list[str] = []
+        for idx in _sample_positions(total, count):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            height, width = frame.shape[:2]
+            if width > max_width:
+                scale = max_width / float(width)
+                frame = cv2.resize(
+                    frame,
+                    (max_width, max(1, int(height * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, buf = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), max(35, min(95, quality))],
+            )
+            if ok:
+                images.append(base64.b64encode(buf).decode("ascii"))
+        return images
+    finally:
+        cap.release()
+
+
+def _collect_visual_frames(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> list[str]:
+    if not cfg.get("send_video_frames", True):
+        return []
+    max_images = int(cfg.get("max_visual_frames", 8) or 0)
+    if max_images <= 0:
+        return []
+    max_width = int(cfg.get("visual_frame_max_width", 960) or 960)
+    quality = int(cfg.get("visual_frame_jpeg_quality", 72) or 72)
+
+    raw_video = analysis.get("raw_video")
+    annotated_video = analysis.get("annotated_video")
+    paths = [p for p in (raw_video, annotated_video) if p and Path(str(p)).exists()]
+    if not paths:
+        return []
+    if len(paths) == 1:
+        return _video_frames(str(paths[0]), max_images, max_width, quality)
+
+    first_count = max(1, max_images // 2)
+    images = _video_frames(str(paths[0]), first_count, max_width, quality)
+    images.extend(_video_frames(str(paths[1]), max_images - len(images), max_width, quality))
+    return images[:max_images]
+
+
 def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not cfg.get("enabled"):
         return None
@@ -29,6 +104,8 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
     timeout = int(cfg.get("timeout_seconds", 60))
     if not endpoint:
         return None
+
+    images = _collect_visual_frames(cfg, analysis)
 
     user_prompt = (
         "Analyze this golf swing.\n\n"
@@ -40,6 +117,10 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         f"Swing scores: {json.dumps(analysis.get('scores', {}))}\n"
         f"Score summary: {analysis.get('score_summary')}\n"
         f"Detected faults: {json.dumps(analysis.get('faults', []))}\n\n"
+        f"Visual frames attached: {len(images)}. When images are attached, they are sampled "
+        "from the raw swing video and the annotated/marker video. Use the raw golfer motion "
+        "as primary evidence; marker overlays may be approximate or temporarily inaccurate. "
+        "Review the sequence across as many attached frames as needed before deciding the priority issue.\n"
         "Treat hip depth and balance as camera-specific trend metrics, not true 3D measurements.\n"
         "Reply with JSON only:\n"
         "{\n"
@@ -58,11 +139,21 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
         "stream": False,
         "format": "json",
     }
+    if images:
+        body["images"] = images
     try:
         r = requests.post(endpoint, json=body, timeout=timeout)
         if r.status_code >= 400:
             log.warning("LLM %s returned %s", endpoint, r.status_code)
-            return None
+            if images:
+                log.warning("Retrying LLM without visual frames; model may not support vision")
+                body.pop("images", None)
+                r = requests.post(endpoint, json=body, timeout=timeout)
+                if r.status_code >= 400:
+                    log.warning("LLM %s returned %s without visual frames", endpoint, r.status_code)
+                    return None
+            else:
+                return None
         data = r.json()
     except Exception as e:
         log.warning("LLM call failed: %s", e)
@@ -75,8 +166,13 @@ def generate_summary(cfg: Dict[str, Any], analysis: Dict[str, Any]) -> Optional[
     try:
         parsed = json.loads(response)
         if isinstance(parsed, dict):
+            parsed["visual_frames_sent"] = len(images)
             return parsed
     except Exception:
         log.info("LLM response was not valid JSON; returning raw text")
-        return {"summary": response.strip(), "confidence": "low"}
+        return {
+            "summary": response.strip(),
+            "confidence": "low",
+            "visual_frames_sent": len(images),
+        }
     return None

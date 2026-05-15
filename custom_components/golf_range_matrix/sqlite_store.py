@@ -303,6 +303,18 @@ class NovaGolfStore:
             latest = db.execute(
                 "select * from shots where discarded = 0 order by received_at desc limit 1"
             ).fetchone()
+            recent_shots = [
+                dict(row)
+                for row in db.execute(
+                    """
+                    select *
+                    from shots
+                    where discarded = 0
+                    order by received_at desc
+                    limit 50
+                    """
+                ).fetchall()
+            ]
 
         active_player = str(app_state.get("active_player") or (players[0] if players else "Tyler"))
         active_club = str(app_state.get("active_club") or ((bags.get(active_player) or ["Driver"])[0]))
@@ -326,6 +338,7 @@ class NovaGolfStore:
             "bag_test_shot_count": int(app_state.get("bag_test_shot_count", 0) or 0),
             "shots_per_club": int(app_state.get("shots_per_club", DEFAULT_SHOTS_PER_CLUB) or DEFAULT_SHOTS_PER_CLUB),
             "latest_shot": metrics,
+            "recent_shots": recent_shots,
             "metrics": metrics,
             "bag_summary": bag_summary,
         }

@@ -65,6 +65,13 @@ llm:
   endpoint: "http://localhost:11434/api/generate"
   model: "trinity"
   timeout_seconds: 60
+  # Ollama vision models accept sampled video frames in the "images" field.
+  # Use a vision-capable local model if you want the coach to compare raw
+  # motion against the annotated marker overlay.
+  send_video_frames: true
+  max_visual_frames: 8
+  visual_frame_max_width: 960
+  visual_frame_jpeg_quality: 72
 
 # Optional: copy each freshly-rendered annotated MP4 into one or more
 # destinations. Typically used to publish clips through Home Assistant so

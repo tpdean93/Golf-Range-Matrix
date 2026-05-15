@@ -266,9 +266,13 @@ llm:
   endpoint: "http://localhost:11434/api/generate"
   model: "trinity"
   timeout_seconds: 60
+  send_video_frames: true
+  max_visual_frames: 8
 ```
 
-The LLM receives the structured analysis JSON: club, camera angle, NOVA metrics, body metrics, advanced traces, deterministic scores, detected faults, and the score summary. It is asked to return:
+The LLM receives the structured analysis JSON: club, camera angle, NOVA metrics, body metrics, advanced traces, deterministic scores, detected faults, and the score summary. When `send_video_frames` is enabled, the analyzer also samples frames from the raw and annotated videos and sends them through Ollama's `images` field. Use a vision-capable local model for that mode.
+
+The prompt tells the model to use raw golfer motion as primary evidence and treat marker overlays as approximate because pose markers can be wrong for a few frames. It is asked to return:
 
 ```json
 {

@@ -146,6 +146,11 @@
                 "sensor.golf_swing_analyzer_last_swing_body_summary",
                 "sensor.golf_swing_analyzer_last_swing_faults",
                 "sensor.golf_swing_analyzer_last_swing_summary",
+                "sensor.golf_swing_analyzer_last_swing_priority_fault",
+                "sensor.golf_swing_analyzer_last_swing_why_it_matters",
+                "sensor.golf_swing_analyzer_last_swing_evidence",
+                "sensor.golf_swing_analyzer_last_swing_drill",
+                "sensor.golf_swing_analyzer_last_swing_confidence",
                 "sensor.golf_swing_analyzer_last_swing_annotated_url",
                 "sensor.golf_swing_analyzer_last_swing_raw_url",
                 "sensor.golf_swing_analyzer_last_swing_timestamp"

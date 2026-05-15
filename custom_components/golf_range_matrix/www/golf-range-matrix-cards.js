@@ -42,7 +42,7 @@ class NovaShotTracerCard extends HTMLElement {
     const watched = ['ball_speed','carry','total','offline','launch_angle','launch_direction','total_spin','spin_axis','shot_shape','shot_grade','latest_shot']
       .map(key => this.entity(key));
     watched.push(this.config.connection_entity || 'binary_sensor.nova_connection');
-    const signature = watched.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}`).join('|');
+    const signature = watched.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}:${hass.states?.[entity]?.last_changed ?? ''}`).join('|');
     if (this._signature === signature && this._rendered) return;
     this._signature = signature;
     this.render();
@@ -80,6 +80,20 @@ class NovaShotTracerCard extends HTMLElement {
     const minutes = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
     return minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} hr ago`;
   }
+  fresh(entity, minutes = 10) {
+    const state = this.state(entity);
+    const raw = state?.attributes?.received_at || state?.last_changed || state?.last_updated;
+    if (!raw) return false;
+    const then = new Date(raw);
+    return !Number.isNaN(then.getTime()) && Date.now() - then.getTime() <= minutes * 60000;
+  }
+  connected(latestEntity, metricEntities) {
+    const connection = this.state(this.config.connection_entity || 'binary_sensor.nova_connection');
+    if (connection?.state === 'on') return true;
+    const staleMinutes = Number(this.config.connection_stale_minutes || 10);
+    if (this.fresh(latestEntity, staleMinutes)) return true;
+    return metricEntities.some(entity => this.value(entity) !== null && this.fresh(entity, staleMinutes));
+  }
   render() {
     if (!this._hass || !this.config) return;
     this._rendered = true;
@@ -106,7 +120,7 @@ class NovaShotTracerCard extends HTMLElement {
     const offline = Number(this.value(offlineEntity) || 0);
     const shotName = this.value(shapeEntity) || '';
     const shotRank = this.value(gradeEntity) || '';
-    const connected = this.state(this.config.connection_entity || 'binary_sensor.nova_connection')?.state === 'on';
+    const connected = this.connected(latestEntity, [speedEntity, carryEntity, totalEntity, offlineEntity]);
     const startX = 195, startY = 222;
     const distanceLift = carry ? this.clamp((carry - 110) * 0.18, -12, 34) : 0;
     const direction = side + axis * 0.22 + offline * 0.08;
@@ -165,11 +179,21 @@ class GolfShotHistoryCard extends HTMLElement {
       'sensor.golf_range_matrix_range_matrix_ball_speed',
     ];
     this.basis = this.config.basis_entity || this.entities[0];
+    this.historyEntities = [
+      this.config.history_entity,
+      'sensor.golf_range_matrix_range_matrix_recent_shots',
+      'sensor.golf_range_matrix_recent_shots',
+    ].filter(Boolean);
     this._liveShots = [];
   }
   set hass(hass) {
     this._hass = hass;
-    const signature = this.entities.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}`).join('|');
+    this.historyEntity = this.historyEntities.find(entity => hass.states?.[entity]) || this.historyEntities[0];
+    const recent = hass.states?.[this.historyEntity];
+    const signature = [
+      ...this.entities.map(entity => `${entity}:${hass.states?.[entity]?.state ?? ''}:${hass.states?.[entity]?.last_changed ?? ''}`),
+      `${this.historyEntity}:${recent?.state ?? ''}:${recent?.last_changed ?? ''}`,
+    ].join('|');
     if (signature !== this._liveSignature) {
       this._liveSignature = signature;
       this.addLiveShot();
@@ -184,6 +208,23 @@ class GolfShotHistoryCard extends HTMLElement {
   }
   label(entity) {
     return entity.split('.').pop().replace('golf_range_matrix_range_matrix_', '').replaceAll('_', ' ');
+  }
+  field(entity) {
+    return entity.split('.').pop().replace('golf_range_matrix_range_matrix_', '');
+  }
+  shotFromStored(row, idx) {
+    const shot = { idx: idx + 1, t: new Date(row.received_at || row.timestamp || row.last_changed || Date.now()).getTime() };
+    for (const entity of this.entities) shot[entity] = this.num(row[this.field(entity)]);
+    return shot;
+  }
+  loadStoredShots() {
+    const rows = novaAttrs(this._hass, this.historyEntity).shots;
+    if (!Array.isArray(rows) || !rows.length) return false;
+    const historyShots = rows.slice(-this.limit).map((row, idx) => this.shotFromStored(row, idx));
+    this._historyShots = historyShots;
+    this._shots = this.mergeShots(historyShots);
+    this._error = '';
+    return true;
   }
   currentShot() {
     if (!this._hass) return null;
@@ -217,33 +258,35 @@ class GolfShotHistoryCard extends HTMLElement {
     this._fetching = true;
     this._lastFetch = Date.now();
     try {
-      const start = new Date(Date.now() - (this.config.hours_back || 168) * 3600000).toISOString();
-      const rows = await this._hass.callApi('GET', `history/period/${start}?filter_entity_id=${encodeURIComponent(this.entities.join(','))}&minimal_response`);
-      const byEntity = {};
-      for (const list of rows || []) {
-        for (const item of list || []) {
-          byEntity[item.entity_id] = byEntity[item.entity_id] || [];
-          const value = this.num(item.state);
-          if (value !== null) byEntity[item.entity_id].push({ t: new Date(item.last_changed || item.last_updated).getTime(), v: value });
-        }
-      }
-      const basisRows = byEntity[this.basis] || [];
-      const historyShots = basisRows.slice(-this.limit).map((point, idx) => {
-        const shot = { idx: idx + 1, t: point.t };
-        for (const entity of this.entities) {
-          const series = byEntity[entity] || [];
-          let match = null;
-          for (const item of series) {
-            if (item.t <= point.t + 10000) match = item;
-            else break;
+      if (!this.loadStoredShots()) {
+        const start = new Date(Date.now() - (this.config.hours_back || 168) * 3600000).toISOString();
+        const rows = await this._hass.callApi('GET', `history/period/${start}?filter_entity_id=${encodeURIComponent(this.entities.join(','))}&minimal_response=1`);
+        const byEntity = {};
+        for (const list of rows || []) {
+          for (const item of list || []) {
+            byEntity[item.entity_id] = byEntity[item.entity_id] || [];
+            const value = this.num(item.state);
+            if (value !== null) byEntity[item.entity_id].push({ t: new Date(item.last_changed || item.last_updated).getTime(), v: value });
           }
-          shot[entity] = match?.v ?? null;
         }
-        return shot;
-      });
-      this._historyShots = historyShots;
-      this._shots = this.mergeShots(historyShots);
-      this._error = '';
+        const basisRows = byEntity[this.basis] || [];
+        const historyShots = basisRows.slice(-this.limit).map((point, idx) => {
+          const shot = { idx: idx + 1, t: point.t };
+          for (const entity of this.entities) {
+            const series = byEntity[entity] || [];
+            let match = null;
+            for (const item of series) {
+              if (item.t <= point.t + 10000) match = item;
+              else break;
+            }
+            shot[entity] = match?.v ?? null;
+          }
+          return shot;
+        });
+        this._historyShots = historyShots;
+        this._shots = this.mergeShots(historyShots);
+        this._error = '';
+      }
     } catch (err) {
       this._error = err?.message || String(err);
       this._shots = this.mergeShots(this._historyShots || []);
@@ -293,7 +336,7 @@ class GolfShotHistoryCard extends HTMLElement {
     this.innerHTML = `<ha-card><div class="panel"><div class="head"><div><div class="kicker">Shot History</div><div class="title">${novaEsc(title)}</div></div><button>${this._fetching ? 'Loading' : 'Refresh'}</button></div>${this._error ? `<div class="error">${novaEsc(this._error)}</div>` : ''}<div class="charts">${this.chart('Distance', distance)}${this.chart('Direction + Speed', flight)}</div></div></ha-card><style>
       ha-card{border:0;border-radius:24px;background:linear-gradient(145deg,rgba(20,26,44,.92),rgba(8,12,24,.84));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}.panel{padding:18px;position:relative;isolation:isolate}.panel:before{content:'';position:absolute;inset:-40% auto auto 35%;width:360px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 64%);z-index:-1}.head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.title{font-size:20px;font-weight:900;letter-spacing:-.04em}button{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);border-radius:999px;padding:7px 10px;font-weight:800;text-transform:uppercase;font-size:10px}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.chart{border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.055);padding:12px}.chartHead{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:14px;font-weight:850;text-transform:capitalize}.chartHead small{color:rgba(255,255,255,.48);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}svg{width:100%;height:160px}.grid line{stroke:rgba(255,255,255,.1);stroke-width:1}.line{fill:none;stroke:var(--c);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.series circle{fill:var(--c);filter:drop-shadow(0 0 8px var(--c))}.legend{display:flex;gap:10px;flex-wrap:wrap;color:rgba(255,255,255,.7);font-size:12px;font-weight:800;text-transform:capitalize}.legend span{display:flex;align-items:center;gap:5px}.legend b{display:block;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c)}.error{color:#ff9aad;margin-bottom:10px}@media(max-width:760px){.charts{grid-template-columns:1fr}}
     </style>`;
-    this.querySelector('button')?.addEventListener('click', () => { this._lastFetch = 0; this.fetchData(); });
+    this.querySelector('button')?.addEventListener('click', () => { this._lastFetch = 0; this._historyShots = []; this.fetchData(); });
   }
 }
 
@@ -669,13 +712,24 @@ class RangeSwingVideoCard extends HTMLElement {
       url_entity: 'sensor.golf_swing_analyzer_last_swing_annotated_url',
       timestamp_entity: 'sensor.golf_swing_analyzer_last_swing_timestamp',
       club_entity: 'sensor.golf_swing_analyzer_last_swing_club',
+      summary_entity: 'sensor.golf_swing_analyzer_last_swing_summary',
+      priority_entity: 'sensor.golf_swing_analyzer_last_swing_priority_fault',
+      why_entity: 'sensor.golf_swing_analyzer_last_swing_why_it_matters',
+      evidence_entity: 'sensor.golf_swing_analyzer_last_swing_evidence',
+      drill_entity: 'sensor.golf_swing_analyzer_last_swing_drill',
+      confidence_entity: 'sensor.golf_swing_analyzer_last_swing_confidence',
       title: 'Last Swing',
       ...config,
     };
   }
   set hass(hass) {
     this._hass = hass;
-    const ids = [this.config.switch_entity, this.config.url_entity, this.config.timestamp_entity, this.config.club_entity];
+    const ids = [
+      this.config.switch_entity, this.config.url_entity, this.config.timestamp_entity,
+      this.config.club_entity, this.config.summary_entity, this.config.priority_entity,
+      this.config.why_entity, this.config.evidence_entity, this.config.drill_entity,
+      this.config.confidence_entity,
+    ];
     const signature = ids.map((id) => `${id}:${hass.states?.[id]?.state || ''}:${hass.states?.[id]?.last_changed || ''}`).join('|');
     if (signature === this._signature) return;
     this._signature = signature;
@@ -689,6 +743,27 @@ class RangeSwingVideoCard extends HTMLElement {
   }
   toggle() {
     this._hass.callService('switch', 'toggle', { entity_id: this.config.switch_entity });
+  }
+  text(entity) {
+    const state = novaState(this._hass, entity)?.state;
+    return state && !['unknown', 'unavailable', 'none'].includes(String(state).toLowerCase()) ? String(state) : '';
+  }
+  coaching() {
+    const priority = this.text(this.config.priority_entity);
+    const why = this.text(this.config.why_entity);
+    const evidence = this.text(this.config.evidence_entity);
+    const drill = this.text(this.config.drill_entity);
+    const confidence = this.text(this.config.confidence_entity);
+    const summary = this.text(this.config.summary_entity);
+    if (![priority, why, evidence, drill, summary].some(Boolean)) return '';
+    const evidenceItems = evidence.split(/\s+\|\s+|\n+/).map(item => item.trim()).filter(Boolean);
+    return `<section class="coach">
+      <div class="coachHead"><div><div class="kicker">Local LLM Breakdown</div><h3>${novaEsc(priority || 'Swing analysis')}</h3></div>${confidence ? `<span>${novaEsc(confidence)}</span>` : ''}</div>
+      ${summary && summary !== priority ? `<p>${novaEsc(summary)}</p>` : ''}
+      ${why ? `<div class="coachBlock"><b>Why it matters</b><p>${novaEsc(why)}</p></div>` : ''}
+      ${evidenceItems.length ? `<div class="coachBlock"><b>Evidence</b><ul>${evidenceItems.map(item => `<li>${novaEsc(item)}</li>`).join('')}</ul></div>` : ''}
+      ${drill ? `<div class="coachBlock"><b>Drill</b><p>${novaEsc(drill)}</p></div>` : ''}
+    </section>`;
   }
   render() {
     if (!this._hass) return;
@@ -704,9 +779,10 @@ class RangeSwingVideoCard extends HTMLElement {
     this.innerHTML = `<ha-card><div class="swing-card">
       <div class="top"><div><div class="kicker">Swing Analyzer</div><h2>${novaEsc(this.config.title)}</h2><div class="meta">${novaEsc(meta)}</div></div><button class="toggle ${on ? 'on' : ''}"><ha-icon icon="mdi:video-vintage"></ha-icon><span>${on ? 'On' : 'Off'}</span></button></div>
       ${src ? `<video class="video" muted controls playsinline preload="auto" autoplay loop src="${novaEsc(src)}"></video>` : `<div class="empty">No swing analyzed yet.</div>`}
+      ${this.coaching()}
     </div></ha-card><style>
       ha-card{border:0;border-radius:28px;background:linear-gradient(145deg,rgba(18,25,45,.94),rgba(8,12,24,.86));color:white;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.34)}
-      .swing-card{padding:18px;position:relative;isolation:isolate}.swing-card:before{content:'';position:absolute;inset:-35% auto auto 42%;width:360px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 65%);z-index:-1}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h2{margin:2px 0 0;font-size:25px;font-weight:950;letter-spacing:-.04em}.meta{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:800}.toggle{height:38px;min-width:82px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);font-weight:950;cursor:pointer}.toggle ha-icon{--mdc-icon-size:19px;color:#8ffcff}.toggle.on{background:rgba(114,255,125,.14);border-color:rgba(114,255,125,.42);color:#d8ffdc}.toggle.on ha-icon{color:#72ff7d}.video{width:100%;aspect-ratio:16/9;min-height:320px;background:#000;border-radius:20px;display:block;object-fit:contain}.empty{display:grid;place-items:center;min-height:280px;border-radius:20px;background:rgba(0,0,0,.28);color:rgba(255,255,255,.62);font-weight:800;text-align:center;padding:14px}@media(max-width:900px){.video{min-height:220px}.empty{min-height:220px}}
+      .swing-card{padding:18px;position:relative;isolation:isolate}.swing-card:before{content:'';position:absolute;inset:-35% auto auto 42%;width:360px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(56,248,255,.18),transparent 65%);z-index:-1}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.kicker{color:#8ffcff;font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h2{margin:2px 0 0;font-size:25px;font-weight:950;letter-spacing:-.04em}.meta{margin-top:4px;color:rgba(255,255,255,.58);font-size:12px;font-weight:800}.toggle{height:38px;min-width:82px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);font-weight:950;cursor:pointer}.toggle ha-icon{--mdc-icon-size:19px;color:#8ffcff}.toggle.on{background:rgba(114,255,125,.14);border-color:rgba(114,255,125,.42);color:#d8ffdc}.toggle.on ha-icon{color:#72ff7d}.video{width:100%;aspect-ratio:16/9;min-height:320px;background:#000;border-radius:20px;display:block;object-fit:contain}.empty{display:grid;place-items:center;min-height:280px;border-radius:20px;background:rgba(0,0,0,.28);color:rgba(255,255,255,.62);font-weight:800;text-align:center;padding:14px}.coach{margin-top:14px;border:1px solid rgba(56,248,255,.18);border-radius:22px;background:rgba(56,248,255,.07);padding:14px}.coachHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.coach h3{margin:2px 0 0;font-size:20px;line-height:1.1;letter-spacing:-.03em}.coachHead span{border:1px solid rgba(247,255,92,.28);border-radius:999px;padding:6px 9px;color:#f7ff8a;font-size:11px;font-weight:950;text-transform:uppercase}.coach p{margin:8px 0 0;color:rgba(255,255,255,.80);font-weight:760;line-height:1.42}.coachBlock{margin-top:12px}.coachBlock b{display:block;color:#8ffcff;text-transform:uppercase;letter-spacing:.12em;font-size:10px}.coachBlock ul{margin:8px 0 0;padding-left:19px;color:rgba(255,255,255,.80);font-weight:760;line-height:1.4}@media(max-width:900px){.video{min-height:220px}.empty{min-height:220px}}
     </style>`;
     this.querySelector('.toggle')?.addEventListener('click', () => this.toggle());
     const video = this.querySelector('video');

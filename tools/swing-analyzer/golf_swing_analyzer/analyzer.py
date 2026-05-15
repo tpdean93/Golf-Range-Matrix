@@ -349,11 +349,23 @@ class Analyzer:
 
         llm_result = generate_summary(self.cfg.get("llm", {}), analysis)
         if llm_result:
+            evidence = llm_result.get("evidence") or []
+            if isinstance(evidence, str):
+                evidence_text = evidence
+            elif isinstance(evidence, list):
+                evidence_text = " | ".join(str(item) for item in evidence if item)
+            else:
+                evidence_text = ""
             analysis["summary"] = (
                 llm_result.get("summary")
                 or llm_result.get("priority_fault")
                 or analysis["body_summary"]
             )
+            analysis["llm_priority_fault"] = str(llm_result.get("priority_fault") or "")
+            analysis["llm_why_it_matters"] = str(llm_result.get("why_it_matters") or "")
+            analysis["llm_evidence"] = evidence_text
+            analysis["llm_drill"] = str(llm_result.get("drill") or "")
+            analysis["llm_confidence"] = str(llm_result.get("confidence") or "")
             analysis["llm"] = llm_result
         else:
             analysis["summary"] = analysis["body_summary"]
